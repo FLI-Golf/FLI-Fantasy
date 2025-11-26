@@ -4,64 +4,62 @@
 
 @layer base {
 	:root {
-		/* Brand Colors - Deep Blue, Purple, Gold Theme */
-		--brand-deep-blue: 222.2 84% 4.9%;
-		--brand-deep-blue-light: 217.2 91.2% 59.8%;
-		--brand-purple: 271.5 81.3% 55.9%;
-		--brand-purple-light: 270.7 91% 65.1%;
-		--brand-gold: 45.4 93.4% 47.5%;
-		--brand-gold-light: 47.9 95.8% 53.1%;
+		/* Brand Colors - FLI Golf Blue (#2F91F6) and Black */
+		--brand-blue: 207 92% 57%; /* #2F91F6 */
+		--brand-blue-light: 207 92% 67%;
+		--brand-blue-dark: 207 92% 47%;
+		--brand-black: 0 0% 0%;
 
-		/* Shadcn UI Variables */
-		--background: 0 0% 100%;
-		--foreground: 222.2 84% 4.9%;
-		--card: 0 0% 100%;
-		--card-foreground: 222.2 84% 4.9%;
+		/* Shadcn UI Variables - Updated for FLI Golf Theme */
+		--background: 207 92% 57%; /* #2F91F6 background */
+		--foreground: 0 0% 100%; /* White text on blue */
+		--card: 0 0% 100%; /* White cards */
+		--card-foreground: 0 0% 0%; /* Black text on cards */
 		--popover: 0 0% 100%;
-		--popover-foreground: 222.2 84% 4.9%;
+		--popover-foreground: 0 0% 0%;
 		
-		/* Primary uses brand purple */
-		--primary: 271.5 81.3% 55.9%;
+		/* Primary uses FLI blue */
+		--primary: 207 92% 57%; /* #2F91F6 */
 		--primary-foreground: 0 0% 100%;
 		
-		/* Secondary uses brand deep blue */
-		--secondary: 222.2 84% 4.9%;
+		/* Secondary uses black */
+		--secondary: 0 0% 0%;
 		--secondary-foreground: 0 0% 100%;
 		
-		/* Accent uses brand gold */
-		--accent: 45.4 93.4% 47.5%;
-		--accent-foreground: 222.2 84% 4.9%;
+		/* Accent uses lighter blue */
+		--accent: 207 92% 67%;
+		--accent-foreground: 0 0% 0%;
 		
-		--muted: 210 40% 96.1%;
-		--muted-foreground: 215.4 16.3% 46.9%;
+		--muted: 207 30% 90%;
+		--muted-foreground: 0 0% 40%;
 		--destructive: 0 84.2% 60.2%;
-		--destructive-foreground: 210 40% 98%;
-		--border: 214.3 31.8% 91.4%;
-		--input: 214.3 31.8% 91.4%;
-		--ring: 271.5 81.3% 55.9%;
+		--destructive-foreground: 0 0% 100%;
+		--border: 0 0% 90%;
+		--input: 0 0% 95%;
+		--ring: 207 92% 57%;
 		--radius: 0.5rem;
 	}
 
 	.dark {
-		--background: 222.2 84% 4.9%;
-		--foreground: 210 40% 98%;
-		--card: 222.2 84% 4.9%;
-		--card-foreground: 210 40% 98%;
-		--popover: 222.2 84% 4.9%;
-		--popover-foreground: 210 40% 98%;
-		--primary: 271.5 81.3% 55.9%;
+		--background: 0 0% 0%; /* Black background in dark mode */
+		--foreground: 0 0% 100%;
+		--card: 0 0% 10%;
+		--card-foreground: 0 0% 100%;
+		--popover: 0 0% 10%;
+		--popover-foreground: 0 0% 100%;
+		--primary: 207 92% 57%; /* #2F91F6 */
 		--primary-foreground: 0 0% 100%;
-		--secondary: 217.2 32.6% 17.5%;
-		--secondary-foreground: 210 40% 98%;
-		--accent: 45.4 93.4% 47.5%;
-		--accent-foreground: 222.2 84% 4.9%;
-		--muted: 217.2 32.6% 17.5%;
-		--muted-foreground: 215 20.2% 65.1%;
+		--secondary: 0 0% 20%;
+		--secondary-foreground: 0 0% 100%;
+		--accent: 207 92% 67%;
+		--accent-foreground: 0 0% 0%;
+		--muted: 0 0% 20%;
+		--muted-foreground: 0 0% 70%;
 		--destructive: 0 62.8% 30.6%;
-		--destructive-foreground: 210 40% 98%;
-		--border: 217.2 32.6% 17.5%;
-		--input: 217.2 32.6% 17.5%;
-		--ring: 271.5 81.3% 55.9%;
+		--destructive-foreground: 0 0% 100%;
+		--border: 0 0% 20%;
+		--input: 0 0% 20%;
+		--ring: 207 92% 57%;
 	}
 }
 

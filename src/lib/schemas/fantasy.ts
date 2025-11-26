@@ -14,8 +14,8 @@ export type FantasySeasonCreateInput = z.infer<typeof fantasySeasonCreateSchema>
 // Schema for a fantasy season record from PocketBase
 export const fantasySeasonRecordSchema = z.object({
 	id: z.string(),
-	collectionId: z.string(),
-	collectionName: z.string(),
+	collectionId: z.string().optional(),
+	collectionName: z.string().optional(),
 	created: z.string(),
 	updated: z.string(),
 	name: z.string(),
@@ -34,14 +34,15 @@ export type FantasySeason = z.infer<typeof fantasySeasonRecordSchema>;
 // Schema for a fantasy season participant record
 export const fantasySeasonParticipantRecordSchema = z.object({
 	id: z.string(),
-	collectionId: z.string(),
-	collectionName: z.string(),
+	collectionId: z.string().optional(),
+	collectionName: z.string().optional(),
 	created: z.string(),
 	updated: z.string(),
 	season: z.string(),
 	user: z.string(),
 	is_owner: z.boolean(),
-	joined_at: z.string()
+	joined_at: z.string(),
+	total_points: z.number().optional()
 });
 
 export type FantasySeasonParticipant = z.infer<typeof fantasySeasonParticipantRecordSchema>;

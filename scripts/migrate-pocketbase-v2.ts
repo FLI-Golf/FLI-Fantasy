@@ -13,6 +13,9 @@ const ADMIN_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD;
 
 const pb = new PocketBase(POCKETBASE_URL);
 
+// Cache for collection name to ID mapping
+let collectionIdMap: Map<string, string> = new Map();
+
 async function authenticateAdmin() {
 	console.log('🔐 Authenticating as admin...');
 	if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
@@ -23,14 +26,51 @@ async function authenticateAdmin() {
 	console.log('✅ Authenticated successfully\n');
 }
 
+async function buildCollectionIdMap() {
+	console.log('📋 Building collection ID map...');
+	const collections = await pb.collections.getFullList();
+	collections.forEach((col: any) => {
+		collectionIdMap.set(col.name, col.id);
+	});
+	console.log(`✅ Mapped ${collectionIdMap.size} collections\n`);
+}
+
+function resolveCollectionIds(schema: any[]): any[] {
+	return schema.map(field => {
+		if (field.type === 'relation' && field.options?.collectionId) {
+			const collectionName = field.options.collectionId;
+			// Skip system collections that start with _
+			if (!collectionName.startsWith('_')) {
+				const collectionId = collectionIdMap.get(collectionName);
+				if (collectionId) {
+					return {
+						...field,
+						options: {
+							...field.options,
+							collectionId: collectionId
+						}
+					};
+				}
+			}
+		}
+		return field;
+	});
+}
+
 async function createOrUpdateCollection(collectionData: any) {
-	const { name } = collectionData;
+	const { name, schema } = collectionData;
 	console.log(`📦 Creating/updating ${name} collection...`);
+	
+	// Resolve collection IDs in relation fields
+	const resolvedSchema = schema ? resolveCollectionIds(schema) : [];
+	const resolvedData = { ...collectionData, schema: resolvedSchema };
 	
 	try {
 		// Try to create the collection
-		const created = await pb.collections.create(collectionData);
+		const created = await pb.collections.create(resolvedData);
 		console.log(`✅ ${name} created successfully\n`);
+		// Update the ID map with the new collection
+		collectionIdMap.set(name, created.id);
 		return created;
 	} catch (error: any) {
 		// If collection exists, try to update it
@@ -44,12 +84,15 @@ async function createOrUpdateCollection(collectionData: any) {
 				
 				if (existing) {
 					// Update the collection
-					const updated = await pb.collections.update(existing.id, collectionData);
+					const updated = await pb.collections.update(existing.id, resolvedData);
 					console.log(`✅ ${name} updated successfully\n`);
 					return updated;
 				}
 			} catch (updateError: any) {
 				console.error(`❌ Failed to update ${name}:`, updateError.message);
+				if (updateError.data) {
+					console.error('   Error details:', JSON.stringify(updateError.data, null, 2));
+				}
 			}
 		} else {
 			console.error(`❌ Failed to create ${name}:`, error.message);
@@ -63,6 +106,7 @@ async function main() {
 		console.log(`📍 Target: ${POCKETBASE_URL}\n`);
 		
 		await authenticateAdmin();
+		await buildCollectionIdMap();
 		
 		// fantasy_seasons
 		await createOrUpdateCollection({
@@ -167,14 +211,14 @@ async function main() {
 			name: 'golfer_scores',
 			type: 'base',
 			schema: [
-				{ name: 'tournament_round', type: 'relation', required: true, options: { collectionId: 'tournament_rounds', cascadeDelete: true, minSelect: null, maxSelect: 1, displayFields: ['round_number'] } },
+				{ name: 'tournament_rounds', type: 'relation', required: true, options: { collectionId: 'tournament_rounds', cascadeDelete: true, minSelect: null, maxSelect: 1, displayFields: ['round_number'] } },
 				{ name: 'golfer', type: 'relation', required: true, options: { collectionId: 'golfers', cascadeDelete: false, minSelect: null, maxSelect: 1, displayFields: ['name'] } },
 				{ name: 'score', type: 'number', required: false },
 				{ name: 'total_strokes', type: 'number', required: false, options: { min: 0 } },
 				{ name: 'position', type: 'number', required: false, options: { min: 1 } },
 				{ name: 'is_cut', type: 'bool', required: true }
 			],
-			indexes: ['CREATE UNIQUE INDEX IF NOT EXISTS idx_round_golfer ON golfer_scores (tournament_round, golfer)'],
+			indexes: ['CREATE UNIQUE INDEX IF NOT EXISTS idx_round_golfer ON golfer_scores (tournament_rounds, golfer)'],
 			listRule: '@request.auth.id != ""',
 			viewRule: '@request.auth.id != ""',
 			createRule: '@request.auth.id != ""',
