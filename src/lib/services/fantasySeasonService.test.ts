@@ -9,22 +9,20 @@ const mockGetOne = vi.fn();
 const mockGetFullList = vi.fn();
 const mockUpdate = vi.fn();
 
-vi.mock('$lib/pocketbase', () => ({
-	pb: {
-		collection: vi.fn((name: string) => ({
-			create: mockCreate,
-			getOne: mockGetOne,
-			getFullList: mockGetFullList,
-			update: mockUpdate
-		}))
-	}
-}));
+const mockPb = {
+	collection: vi.fn((name: string) => ({
+		create: mockCreate,
+		getOne: mockGetOne,
+		getFullList: mockGetFullList,
+		update: mockUpdate
+	}))
+} as any;
 
 describe('FantasySeasonService', () => {
 	let service: FantasySeasonService;
 
 	beforeEach(() => {
-		service = new FantasySeasonService();
+		service = new FantasySeasonService(mockPb);
 		vi.clearAllMocks();
 	});
 

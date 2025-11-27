@@ -56,7 +56,7 @@
 					type="email"
 					bind:value={email}
 					required
-					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"
+					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6] text-black"
 				/>
 			</div>
 
@@ -70,7 +70,7 @@
 					type="password"
 					bind:value={password}
 					required
-					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"
+					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6] text-black"
 				/>
 			</div>
 

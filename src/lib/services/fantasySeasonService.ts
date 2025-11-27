@@ -1,4 +1,4 @@
-import { pb } from '$lib/pocketbase';
+import type PocketBase from 'pocketbase';
 import {
 	fantasySeasonCreateSchema,
 	fantasySeasonRecordSchema,
@@ -9,6 +9,7 @@ import {
 } from '$lib/schemas/fantasy';
 
 export class FantasySeasonService {
+	constructor(private pb: PocketBase) {}
 	/**
 	 * Create a new fantasy season owned by ownerUserId.
 	 * Uses Zod to validate input from the form.
@@ -28,7 +29,7 @@ export class FantasySeasonService {
 			schedule_generated: false
 		};
 
-		const created = await pb.collection('fantasy_seasons').create(payload);
+		const created = await this.pb.collection('fantasy_seasons').create(payload);
 		return fantasySeasonRecordSchema.parse(created);
 	}
 
@@ -40,7 +41,7 @@ export class FantasySeasonService {
 		seasonId: string,
 		userId: string
 	): Promise<{ season: FantasySeason; participant: FantasySeasonParticipant }> {
-		const seasonRecord = await pb.collection('fantasy_seasons').getOne(seasonId);
+		const seasonRecord = await this.pb.collection('fantasy_seasons').getOne(seasonId);
 
 		const season = fantasySeasonRecordSchema.parse(seasonRecord);
 
@@ -49,7 +50,7 @@ export class FantasySeasonService {
 		}
 
 		// Check if participant already exists
-		const existing = await pb.collection('fantasy_season_participants').getFullList({
+		const existing = await this.pb.collection('fantasy_season_participants').getFullList({
 			filter: `season = "${seasonId}" && user = "${userId}"`
 		});
 
@@ -60,7 +61,7 @@ export class FantasySeasonService {
 			};
 		}
 
-		const participantRecord = await pb.collection('fantasy_season_participants').create({
+		const participantRecord = await this.pb.collection('fantasy_season_participants').create({
 			season: seasonId,
 			user: userId,
 			is_owner: false,
@@ -70,11 +71,11 @@ export class FantasySeasonService {
 		const participant = fantasySeasonParticipantRecordSchema.parse(participantRecord);
 
 		// Reload participants count
-		const allParticipants = await pb.collection('fantasy_season_participants').getFullList({
+		const allParticipants = await this.pb.collection('fantasy_season_participants').getFullList({
 			filter: `season = "${seasonId}"`
 		});
 
-		const updatedSeasonRecord = await pb
+		const updatedSeasonRecord = await this.pb
 			.collection('fantasy_seasons')
 			.update(seasonId, {
 				participants_count: allParticipants.length
@@ -89,7 +90,7 @@ export class FantasySeasonService {
 	 * List seasons for a given owner.
 	 */
 	async listSeasonsByOwner(ownerUserId: string): Promise<FantasySeason[]> {
-		const list = await pb.collection('fantasy_seasons').getFullList({
+		const list = await this.pb.collection('fantasy_seasons').getFullList({
 			filter: `owner = "${ownerUserId}"`,
 			sort: '-created'
 		});
@@ -97,5 +98,3 @@ export class FantasySeasonService {
 		return list.map((record) => fantasySeasonRecordSchema.parse(record));
 	}
 }
-
-export const fantasySeasonService = new FantasySeasonService();

@@ -1,7 +1,8 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { fantasySeasonCreateSchema } from '$lib/schemas/fantasy';
-import { fantasySeasonService } from '$lib/services/fantasySeasonService';
+import { FantasySeasonService } from '$lib/services/fantasySeasonService';
+import { createServerPocketBase } from '$lib/pocketbase.server';
 
 export const load: PageServerLoad = async () => {
 	return {
@@ -35,6 +36,8 @@ export const actions: Actions = {
 		}
 
 		try {
+			const pb = createServerPocketBase();
+			const fantasySeasonService = new FantasySeasonService(pb);
 			const season = await fantasySeasonService.createSeasonForOwner(ownerUserId, parsed.data);
 
 			// Redirect to a "season detail" page (we'll stub this route)

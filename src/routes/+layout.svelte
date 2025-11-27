@@ -8,6 +8,10 @@
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
+	import Menu from '@lucide/svelte/icons/menu';
+	import X from '@lucide/svelte/icons/x';
+	import ShoppingBag from '@lucide/svelte/icons/shopping-bag';
+	import Trophy from '@lucide/svelte/icons/trophy';
 	import Facebook from '@lucide/svelte/icons/facebook';
 	import Twitter from '@lucide/svelte/icons/twitter';
 	import Instagram from '@lucide/svelte/icons/instagram';
@@ -18,6 +22,7 @@
 	
 	let showLogin = $state(false);
 	let showRegister = $state(false);
+	let mobileMenuOpen = $state(false);
 
 	function logout() {
 		pb.authStore.clear();
@@ -41,11 +46,14 @@
 					/>
 				</a>
 				
-				<nav class="flex items-center gap-4">
-					<a href="/shop" class="text-white hover:text-gray-200 font-semibold transition-colors">
+				<!-- Desktop Navigation -->
+				<nav class="hidden md:flex items-center gap-4">
+					<a href="/shop" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
+						<ShoppingBag class="h-4 w-4" />
 						Shop
 					</a>
-					<a href="/seasons" class="text-white hover:text-gray-200 font-semibold transition-colors">
+					<a href="/seasons" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
+						<Trophy class="h-4 w-4" />
 						Fantasy
 					</a>
 					{#if $currentUser}
@@ -77,7 +85,70 @@
 						</button>
 					{/if}
 				</nav>
+
+				<!-- Mobile Menu Button -->
+				<button
+					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
+					class="md:hidden text-white p-2 hover:bg-gray-800 rounded-lg transition-colors"
+					aria-label="Toggle menu"
+				>
+					{#if mobileMenuOpen}
+						<X class="h-6 w-6" />
+					{:else}
+						<Menu class="h-6 w-6" />
+					{/if}
+				</button>
 			</div>
+
+			<!-- Mobile Navigation -->
+			{#if mobileMenuOpen}
+				<nav class="md:hidden mt-4 pt-4 border-t border-gray-800 flex flex-col gap-3">
+					<a 
+						href="/shop" 
+						class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+						onclick={() => (mobileMenuOpen = false)}
+					>
+						<ShoppingBag class="h-4 w-4" />
+						Shop
+					</a>
+					<a 
+						href="/seasons" 
+						class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+						onclick={() => (mobileMenuOpen = false)}
+					>
+						<Trophy class="h-4 w-4" />
+						Fantasy
+					</a>
+					{#if $currentUser}
+						<span class="text-white flex items-center gap-2 py-2">
+							<Users class="h-4 w-4" />
+							Welcome, {$currentUser.name}!
+						</span>
+						<button
+							onclick={() => { logout(); mobileMenuOpen = false; }}
+							class="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2 transition-colors"
+						>
+							<LogOut class="h-4 w-4" />
+							Logout
+						</button>
+					{:else}
+						<button
+							onclick={() => { showLogin = true; mobileMenuOpen = false; }}
+							class="px-4 py-2 border-2 border-white text-white rounded-lg hover:bg-white hover:text-black flex items-center justify-center gap-2 transition-colors"
+						>
+							<LogIn class="h-4 w-4" />
+							Login
+						</button>
+						<button
+							onclick={() => { showRegister = true; mobileMenuOpen = false; }}
+							class="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 flex items-center justify-center gap-2 transition-colors"
+						>
+							<UserPlus class="h-4 w-4" />
+							Sign Up
+						</button>
+					{/if}
+				</nav>
+			{/if}
 		</div>
 	</header>
 
