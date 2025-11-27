@@ -16,7 +16,13 @@
 		"test:watch": "vitest",
 		"test:ui": "vitest --ui",
 		"test:coverage": "vitest run --coverage",
-		"migrate:pocketbase": "tsx scripts/migrate-pocketbase-v2.ts"
+		"migrate:pocketbase": "tsx scripts/migrate-pocketbase-v2.ts",
+		"migrate:ecommerce": "tsx scripts/migrate-ecommerce-v2.ts",
+		"stripe:login": "stripe login",
+		"stripe:webhooks": "stripe listen --forward-to localhost:5173/api/webhooks/stripe",
+		"stripe:test": "stripe trigger checkout.session.completed",
+		"stripe:sync": "tsx scripts/sync-products-to-stripe.ts",
+		"products:create-samples": "tsx scripts/create-sample-products.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
@@ -58,7 +64,9 @@
 		"vitest-mock-extended": "^3.1.0"
 	},
 	"dependencies": {
+		"@stripe/stripe-js": "^8.5.3",
 		"pocketbase": "^0.26.3",
+		"stripe": "^20.0.0",
 		"zod": "^4.1.13"
 	}
 }

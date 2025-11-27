@@ -44,8 +44,8 @@
 		</Button>
 	</div>
 
-			<!-- Seasons List -->
-			{#if data.seasons.length === 0}
+	<!-- Seasons List -->
+	{#if data.seasons.length === 0}
 				<Card.Root class="border-2 border-gray-200 bg-white">
 					<Card.Content class="py-12 text-center">
 						<div class="flex justify-center mb-4">
@@ -139,6 +139,4 @@
 					{/each}
 				</div>
 			{/if}
-		</section>
-	</div>
 </div>

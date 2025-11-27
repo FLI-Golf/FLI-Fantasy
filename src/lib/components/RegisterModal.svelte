@@ -79,6 +79,7 @@
 				<Input
 					id="name"
 					type="text"
+					text="black"
 					bind:value={name}
 					required
 					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"
@@ -93,6 +94,7 @@
 				<Input
 					id="email"
 					type="email"
+					text="black"
 					bind:value={email}
 					required
 					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"
@@ -107,6 +109,7 @@
 				<Input
 					id="password"
 					type="password"
+					text="black"
 					bind:value={password}
 					required
 					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"
@@ -121,6 +124,7 @@
 				<Input
 					id="passwordConfirm"
 					type="password"
+					text="black"
 					bind:value={passwordConfirm}
 					required
 					class="bg-white border-gray-300 focus:border-[#2F91F6] focus:ring-[#2F91F6]"

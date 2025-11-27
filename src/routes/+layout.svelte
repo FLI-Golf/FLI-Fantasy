@@ -41,7 +41,13 @@
 					/>
 				</a>
 				
-				<nav class="flex items-center gap-2">
+				<nav class="flex items-center gap-4">
+					<a href="/shop" class="text-white hover:text-gray-200 font-semibold transition-colors">
+						Shop
+					</a>
+					<a href="/seasons" class="text-white hover:text-gray-200 font-semibold transition-colors">
+						Fantasy
+					</a>
 					{#if $currentUser}
 						<span class="text-white mr-4 flex items-center gap-2">
 							<Users class="h-4 w-4" />
