@@ -4,9 +4,22 @@ import { fantasySeasonCreateSchema } from '$lib/schemas/fantasy';
 import { FantasySeasonService } from '$lib/services/fantasySeasonService';
 import { createServerPocketBase } from '$lib/pocketbase.server';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
+	const pb = createServerPocketBase();
+	const ownerUserId = (locals as any)?.user?.id;
+	
+	let ownerName = '';
+	if (ownerUserId) {
+		try {
+			const user = await pb.collection('users').getOne(ownerUserId);
+			ownerName = user.name || '';
+		} catch (error) {
+			console.error('Error fetching user:', error);
+		}
+	}
+	
 	return {
-		// could preload defaults here
+		ownerName
 	};
 };
 

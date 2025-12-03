@@ -4,6 +4,7 @@
 	import { currentUser, pb } from '$lib/pocketbase';
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import RegisterModal from '$lib/components/RegisterModal.svelte';
+	import LiveScoreTicker from '$lib/components/LiveScoreTicker.svelte';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
@@ -56,6 +57,18 @@
 						<Trophy class="h-4 w-4" />
 						Fantasy
 					</a>
+					{#if $currentUser?.role === 'admin'}
+						<a href="/admin" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
+							<Users class="h-4 w-4" />
+							Admin
+						</a>
+					{/if}
+					{#if $currentUser?.role === 'scorekeeper'}
+						<a href="/scorekeeper" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
+							<Users class="h-4 w-4" />
+							Scorekeeper
+						</a>
+					{/if}
 					{#if $currentUser}
 						<span class="text-white mr-4 flex items-center gap-2">
 							<Users class="h-4 w-4" />
@@ -119,6 +132,26 @@
 						<Trophy class="h-4 w-4" />
 						Fantasy
 					</a>
+					{#if $currentUser?.role === 'admin'}
+						<a 
+							href="/admin" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<Users class="h-4 w-4" />
+							Admin
+						</a>
+					{/if}
+					{#if $currentUser?.role === 'scorekeeper'}
+						<a 
+							href="/scorekeeper" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<Users class="h-4 w-4" />
+							Scorekeeper
+						</a>
+					{/if}
 					{#if $currentUser}
 						<span class="text-white flex items-center gap-2 py-2">
 							<Users class="h-4 w-4" />
@@ -151,6 +184,9 @@
 			{/if}
 		</div>
 	</header>
+
+	<!-- Live Score Ticker -->
+	<LiveScoreTicker />
 
 	<!-- Main Content -->
 	<main class="container mx-auto px-4 py-8 flex-grow">

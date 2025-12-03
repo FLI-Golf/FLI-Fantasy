@@ -36,11 +36,18 @@
 		loading = true;
 
 		try {
-			await pb.collection('users').create({
+			// Create user account
+			const user = await pb.collection('users').create({
 				email,
 				password,
 				passwordConfirm,
 				name
+			});
+
+			// Create user profile with default role
+			await pb.collection('user_profile').create({
+				user: user.id,
+				role: 'participant'
 			});
 
 			// Auto-login after registration

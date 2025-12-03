@@ -7,9 +7,10 @@
 
 	let { data, form } = $props();
 
-	let name = $state('');
-	let description = $state('');
-	let max_participants = $state('12');
+	// Use owner's name as default season name
+	let name = $state(data.ownerName ? `${data.ownerName}'s League` : '');
+	// Max participants is always 6 (1 owner + 5 participants)
+	const max_participants = 6;
 
 	let serverErrors = $derived<Record<string, string[]>>(form?.errors ?? {});
 </script>
@@ -23,36 +24,23 @@
 		<Card.Content>
 			<form method="POST" use:enhance class="space-y-4">
 				<div class="space-y-2">
-					<Label for="name">Season Name</Label>
-					<Input id="name" name="name" bind:value={name} required />
+					<Label for="name">League Name</Label>
+					<Input 
+						id="name" 
+						name="name" 
+						bind:value={name} 
+						required 
+						placeholder="Enter league name"
+						class="bg-white text-black"
+					/>
 					{#if serverErrors.name}
 						<p class="text-sm text-red-500">{serverErrors.name[0]}</p>
 					{/if}
 				</div>
 
-				<div class="space-y-2">
-					<Label for="description">Description (Optional)</Label>
-					<Input id="description" name="description" bind:value={description} />
-					{#if serverErrors.description}
-						<p class="text-sm text-red-500">{serverErrors.description[0]}</p>
-					{/if}
-				</div>
-
-				<div class="space-y-2">
-					<Label for="max_participants">Max Participants</Label>
-					<Input
-						id="max_participants"
-						name="max_participants"
-						type="number"
-						min="2"
-						max="100"
-						bind:value={max_participants}
-						required
-					/>
-					{#if serverErrors.max_participants}
-						<p class="text-sm text-red-500">{serverErrors.max_participants[0]}</p>
-					{/if}
-				</div>
+				<!-- Hidden fields -->
+				<input type="hidden" name="max_participants" value="6" />
+				<input type="hidden" name="description" value="" />
 
 				{#if serverErrors._global}
 					<div class="text-sm text-red-500">

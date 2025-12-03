@@ -61,9 +61,9 @@ The FLI Fantasy Golf database is now fully configured with all collections, data
 13. Henna Blomroos (#13) - Reserve
 14. Valerie Mandujano (#13) - Reserve
 
-### Teams (14 total)
+### Teams (12 actual teams + 2 reserve pools)
 
-**Regular Teams (12):**
+**Actual Teams (12):**
 1. Hyzer Heros
 2. Huk-a-Mania
 3. Flight Squad
@@ -77,9 +77,11 @@ The FLI Fantasy Golf database is now fully configured with all collections, data
 11. Ace Makers
 12. Glide Masters
 
-**Reserve Teams (2):**
-13. Reserve Males
-14. Reserve Females
+**Reserve Player Pools (2 - NOT actual teams):**
+13. Reserve Males - Pool of 2 male reserve golfers
+14. Reserve Females - Pool of 2 female reserve golfers
+
+**Note:** Reserve pools are used when a primary golfer gets injured during play. Teams substitute in a reserve of the correct gender.
 
 ### Team Assignments
 

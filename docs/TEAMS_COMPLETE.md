@@ -28,7 +28,9 @@ This is a direct 1-to-1 relationship - each team has exactly one male and one fe
 
 ## Team Roster
 
-### Regular Teams (12 teams)
+**Total:** 12 actual teams + 2 reserve player pools
+
+### Actual Teams (12 teams)
 
 | # | Team Name | Male Golfer | Female Golfer |
 |---|-----------|-------------|---------------|
@@ -45,14 +47,14 @@ This is a direct 1-to-1 relationship - each team has exactly one male and one fe
 | 11 | Ace Makers | Simon Lizotte (#11) | Kat Mertsch (#12) |
 | 12 | Glide Masters | Ezra Robinson (#12) | Natalie Ryan (#12) |
 
-### Reserve Teams (2 teams)
+### Reserve Player Pools (2 pools - NOT actual teams)
 
-| # | Team Name | Golfers |
-|---|-----------|---------|
+| # | Pool Name | Reserve Golfers |
+|---|-----------|-----------------|
 | 13 | Reserve Males | Eagle McMahon (#13), Joel Freeman (#14) |
 | 14 | Reserve Females | Henna Blomroos (#13), Valerie Mandujano (#13) |
 
-**Note:** Reserve teams use both relation fields to store 2 golfers of the same gender.
+**Important:** These are NOT actual teams - they are reserve player pools. When a primary golfer gets injured during play, you substitute in a reserve of the correct gender from these pools. The 12 actual teams can use these reserves when needed.
 
 ## How to Query
 
@@ -113,27 +115,34 @@ const reserveTeams = await pb.collection('teams').getFullList({
 
 ## Reserve System
 
-The `male_reserve_used` and `female_reserve_used` boolean fields track whether a team has used their reserve golfer substitution. This allows for:
+FLI Golf has **12 actual teams** and **2 reserve player pools** (not teams):
+- Reserve Males pool: 2 male golfers
+- Reserve Females pool: 2 female golfers
 
-1. **Injury/Absence Management** - Swap in a reserve when a starter can't play
-2. **Strategic Substitutions** - Use reserves for specific tournaments
-3. **One-time Use** - Each reserve can only be used once per season
+### How Reserves Work
+
+When a primary golfer gets injured during play:
+1. The team substitutes in a reserve of the correct gender from the reserve pool
+2. The `male_reserve_used` or `female_reserve_used` flag is set to `true`
+3. Each team can only use one reserve per gender per season
 
 ### Using a Reserve
 
 ```typescript
-// When a team uses their male reserve
+// When a team's male golfer gets injured, substitute a reserve male
 await pb.collection('teams').update(teamId, {
-  male_golfer: reserveGolferId,
+  male_golfer: reserveMaleGolferId, // From Reserve Males pool
   male_reserve_used: true
 });
 
-// When a team uses their female reserve
+// When a team's female golfer gets injured, substitute a reserve female
 await pb.collection('teams').update(teamId, {
-  female_golfer: reserveGolferId,
+  female_golfer: reserveFemaleGolferId, // From Reserve Females pool
   female_reserve_used: true
 });
 ```
+
+**Important:** The reserve pools (entries 13 & 14 in the teams collection) are just data structures to hold reserve golfers - they don't compete as teams.
 
 ## Files Created
 

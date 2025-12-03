@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { pb } from '$lib/pocketbase';
+	import { goto } from '$app/navigation';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -21,11 +22,27 @@
 		loading = true;
 
 		try {
-			await pb.collection('users').authWithPassword(email, password);
+			console.log('🔐 Attempting login...');
+			const authData = await pb.collection('users').authWithPassword(email, password);
+			console.log('✅ Login successful:', authData.record.email);
+			console.log('👤 User role:', authData.record.role);
+			
+			// Save to cookie explicitly
+			document.cookie = pb.authStore.exportToCookie({ httpOnly: false });
+			console.log('🍪 Auth cookie saved');
+			
+			// Redirect admin users to dashboard immediately
+			if (authData.record.role === 'admin') {
+				console.log('🔄 Redirecting to admin dashboard...');
+				window.location.href = '/admin';
+				return;
+			}
+			
 			open = false;
 			email = '';
 			password = '';
 		} catch (err: any) {
+			console.error('❌ Login failed:', err);
 			error = err.message || 'Login failed';
 		} finally {
 			loading = false;
