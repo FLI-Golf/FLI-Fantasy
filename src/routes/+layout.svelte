@@ -47,62 +47,10 @@
 					/>
 				</a>
 				
-				<!-- Desktop Navigation -->
-				<nav class="hidden md:flex items-center gap-4">
-					<a href="/shop" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
-						<ShoppingBag class="h-4 w-4" />
-						Shop
-					</a>
-					<a href="/seasons" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
-						<Trophy class="h-4 w-4" />
-						Fantasy
-					</a>
-					{#if $currentUser?.role === 'admin'}
-						<a href="/admin" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
-							<Users class="h-4 w-4" />
-							Admin
-						</a>
-					{/if}
-					{#if $currentUser?.role === 'scorekeeper'}
-						<a href="/scorekeeper" class="text-white hover:text-gray-200 font-semibold transition-colors flex items-center gap-2">
-							<Users class="h-4 w-4" />
-							Scorekeeper
-						</a>
-					{/if}
-					{#if $currentUser}
-						<span class="text-white mr-4 flex items-center gap-2">
-							<Users class="h-4 w-4" />
-							Welcome, {$currentUser.name}!
-						</span>
-						<button
-							onclick={logout}
-							class="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 flex items-center gap-2 transition-colors"
-						>
-							<LogOut class="h-4 w-4" />
-							Logout
-						</button>
-					{:else}
-						<button
-							onclick={() => (showLogin = true)}
-							class="px-4 py-2 border-2 border-white text-white rounded-lg hover:bg-white hover:text-black flex items-center gap-2 transition-colors"
-						>
-							<LogIn class="h-4 w-4" />
-							Login
-						</button>
-						<button
-							onclick={() => (showRegister = true)}
-							class="px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 flex items-center gap-2 transition-colors"
-						>
-							<UserPlus class="h-4 w-4" />
-							Sign Up
-						</button>
-					{/if}
-				</nav>
-
-				<!-- Mobile Menu Button -->
+				<!-- Hamburger Menu Button (Always Visible) -->
 				<button
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
-					class="md:hidden text-white p-2 hover:bg-gray-800 rounded-lg transition-colors"
+					class="text-white p-2 hover:bg-gray-800 rounded-lg transition-colors"
 					aria-label="Toggle menu"
 				>
 					{#if mobileMenuOpen}
@@ -113,9 +61,9 @@
 				</button>
 			</div>
 
-			<!-- Mobile Navigation -->
+			<!-- Hamburger Navigation Menu -->
 			{#if mobileMenuOpen}
-				<nav class="md:hidden mt-4 pt-4 border-t border-gray-800 flex flex-col gap-3">
+				<nav class="mt-4 pt-4 border-t border-gray-800 flex flex-col gap-3">
 					<a 
 						href="/shop" 
 						class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"

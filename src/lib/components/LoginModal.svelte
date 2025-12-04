@@ -31,10 +31,14 @@
 			document.cookie = pb.authStore.exportToCookie({ httpOnly: false });
 			console.log('🍪 Auth cookie saved');
 			
-			// Redirect admin users to dashboard immediately
+			// Redirect users based on role
 			if (authData.record.role === 'admin') {
 				console.log('🔄 Redirecting to admin dashboard...');
 				window.location.href = '/admin';
+				return;
+			} else if (authData.record.role === 'scorekeeper') {
+				console.log('🔄 Redirecting to scorekeeper dashboard...');
+				window.location.href = '/scorekeeper';
 				return;
 			}
 			
@@ -43,7 +47,14 @@
 			password = '';
 		} catch (err: any) {
 			console.error('❌ Login failed:', err);
-			error = err.message || 'Login failed';
+			// Provide more helpful error message
+			if (err.status === 400) {
+				error = 'Invalid email or password';
+			} else if (err.status === 404) {
+				error = 'User not found';
+			} else {
+				error = err.message || 'Login failed';
+			}
 		} finally {
 			loading = false;
 		}
