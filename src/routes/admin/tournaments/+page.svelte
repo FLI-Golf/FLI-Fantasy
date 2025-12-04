@@ -7,6 +7,9 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Edit from '@lucide/svelte/icons/edit';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Users from '@lucide/svelte/icons/users';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Flag from '@lucide/svelte/icons/flag';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -42,7 +45,8 @@
 		try {
 			loading = true;
 			tournaments = await pb.collection('tournaments').getFullList({
-				sort: 'start_date'
+				sort: 'start_date',
+				expand: 'course,groups'
 			});
 		} catch (err: any) {
 			console.error('Error loading data:', err);
@@ -151,10 +155,10 @@
 	{:else}
 		<div class="grid gap-4">
 			{#each tournaments as tournament}
-				<div class="bg-white rounded-xl p-6 shadow-lg">
-					<div class="flex items-start justify-between">
+				<div class="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow">
+					<div class="flex items-start justify-between mb-4">
 						<div class="flex-1">
-							<div class="flex items-center gap-3 mb-2">
+							<div class="flex items-center gap-3 mb-3">
 								<h3 class="text-2xl font-bold text-gray-900">{tournament.name}</h3>
 								{#if tournament.status === 'next'}
 									<span class="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-semibold rounded-full">
@@ -173,35 +177,72 @@
 										Upcoming
 									</span>
 								{/if}
+								{#if tournament.season}
+									<span class="px-2 py-1 bg-gray-50 text-gray-600 text-xs font-medium rounded">
+										{tournament.season}
+									</span>
+								{/if}
 							</div>
-							<div class="flex flex-wrap gap-4 text-gray-600">
-								<div class="flex items-center gap-2">
-									<Calendar class="h-4 w-4" />
-									<span>{formatDate(tournament.start_date)} - {formatDate(tournament.end_date)}</span>
+
+							<!-- Primary Info -->
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+								<div class="flex items-center gap-2 text-gray-700">
+									<Calendar class="h-4 w-4 text-blue-600" />
+									<span class="text-sm">{formatDate(tournament.start_date)} - {formatDate(tournament.end_date)}</span>
 								</div>
+								
+								{#if tournament.expand?.course}
+									<div class="flex items-center gap-2 text-gray-700">
+										<Flag class="h-4 w-4 text-green-600" />
+										<span class="text-sm font-medium">{tournament.expand.course.name}</span>
+									</div>
+								{/if}
+
 								{#if tournament.location?.name}
-									<div class="flex items-center gap-2">
-										<MapPin class="h-4 w-4" />
-										<span>{tournament.location.name}</span>
-										{#if tournament.location.latitude && tournament.location.longitude}
-											<span class="text-xs text-gray-400">
-												({tournament.location.latitude.toFixed(4)}, {tournament.location.longitude.toFixed(4)})
-											</span>
-										{/if}
+									<div class="flex items-center gap-2 text-gray-700">
+										<MapPin class="h-4 w-4 text-red-600" />
+										<span class="text-sm">{tournament.location.name}</span>
+									</div>
+								{/if}
+
+								{#if tournament.expand?.groups}
+									<div class="flex items-center gap-2 text-gray-700">
+										<Users class="h-4 w-4 text-purple-600" />
+										<span class="text-sm">{tournament.expand.groups.length} Groups</span>
 									</div>
 								{/if}
 							</div>
-							{#if tournament.season}
-								<p class="text-sm text-gray-500 mt-2">
-									Season: {tournament.season}
-								</p>
+
+							<!-- Start Format Details -->
+							{#if tournament.start_format}
+								<div class="flex items-start gap-2 text-gray-600 bg-gray-50 rounded-lg p-3">
+									<Clock class="h-4 w-4 mt-0.5 text-orange-600" />
+									<div class="text-sm">
+										{#if tournament.start_format === 'shotgun'}
+											<span class="font-semibold">Shotgun Start</span>
+											{#if tournament.first_tee_time}
+												<span class="text-gray-500"> • All groups start at {tournament.first_tee_time}</span>
+											{/if}
+										{:else}
+											<span class="font-semibold">Tee Time Start</span>
+											{#if tournament.first_tee_time}
+												<span class="text-gray-500"> • First tee: {tournament.first_tee_time}</span>
+											{/if}
+											{#if tournament.tee_time_interval}
+												<span class="text-gray-500"> • {tournament.tee_time_interval} min intervals</span>
+											{/if}
+										{/if}
+									</div>
+								</div>
 							{/if}
 						</div>
+
 						<div class="flex gap-2">
 							<Button
 								variant="outline"
 								size="sm"
 								onclick={() => goto(`/admin/tournaments/${tournament.id}`)}
+								class="hover:bg-blue-50"
 							>
 								<Edit class="h-4 w-4" />
 							</Button>

@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Users from '@lucide/svelte/icons/users';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Save from '@lucide/svelte/icons/save';
 	import Play from '@lucide/svelte/icons/play';
@@ -14,8 +15,10 @@
 
 	let tournament = $state<any>(null);
 	let courses = $state<any[]>([]);
+	let groups = $state<any[]>([]);
 	let loading = $state(true);
 	let saving = $state(false);
+	let linkingGroups = $state(false);
 	let error = $state('');
 
 	const seasonOptions = ['2026', '2027', '2028'];
@@ -44,14 +47,19 @@
 			loading = true;
 			const id = $page.params.id;
 			
-			// Load tournament and courses in parallel
-			const [tournamentData, coursesData] = await Promise.all([
-				pb.collection('tournaments').getOne(id, { expand: 'course' }),
-				pb.collection('courses').getFullList({ sort: 'name' })
+			// Load tournament, courses, and groups in parallel
+			const [tournamentData, coursesData, groupsData] = await Promise.all([
+				pb.collection('tournaments').getOne(id, { expand: 'course,groups' }),
+				pb.collection('courses').getFullList({ sort: 'name' }),
+				pb.collection('groups').getFullList({ 
+					sort: 'order',
+					expand: 'team_a,team_b'
+				})
 			]);
 			
 			tournament = tournamentData;
 			courses = coursesData;
+			groups = groupsData;
 			
 			// Populate form
 			formData = {
@@ -92,6 +100,119 @@
 			error = err.message;
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function autoLinkGroups() {
+		try {
+			linkingGroups = true;
+			error = '';
+
+			// Get groups ordered by their order field (1-6)
+			const orderedGroups = groups
+				.filter(g => g.order && g.order >= 1 && g.order <= 6)
+				.sort((a, b) => a.order - b.order)
+				.slice(0, 6); // Max 6 groups
+
+			if (orderedGroups.length === 0) {
+				error = 'No groups found with valid order numbers (1-6). Please create groups first.';
+				return;
+			}
+
+			// Link groups to tournament in order
+			const groupIds = orderedGroups.map(g => g.id);
+			
+			await pb.collection('tournaments').update($page.params.id, {
+				groups: groupIds
+			});
+
+			console.log(`✅ Linked ${groupIds.length} groups to tournament in order:`, orderedGroups.map(g => `${g.order}: ${g.title}`));
+			
+			// Reload tournament to show updated groups
+			await loadTournament();
+		} catch (err: any) {
+			console.error('Error linking groups:', err);
+			error = 'Failed to link groups: ' + err.message;
+		} finally {
+			linkingGroups = false;
+		}
+	}
+
+	async function autoLinkAllTournaments() {
+		try {
+			linkingGroups = true;
+			error = '';
+
+			// Get all next & upcoming tournaments
+			const tournaments = await pb.collection('tournaments').getFullList({
+				filter: 'status = "next" || status = "upcoming"',
+				sort: 'start_date'
+			});
+
+			if (tournaments.length === 0) {
+				error = 'No next or upcoming tournaments found.';
+				return;
+			}
+
+			// Get all teams (excluding reserves)
+			const allTeams = await pb.collection('teams').getFullList({
+				sort: 'name',
+				filter: 'reserves = false || reserves = ""'
+			});
+
+			if (allTeams.length < 2) {
+				error = 'Not enough teams to create groups.';
+				return;
+			}
+
+			const maxGroups = Math.min(6, Math.floor(allTeams.length / 2));
+
+			// Create unique groups for each tournament
+			for (const tournament of tournaments) {
+				// Shuffle teams for this tournament
+				const shuffled = [...allTeams].sort(() => Math.random() - 0.5);
+				
+				// Create new groups for this tournament
+				const newGroupIds = [];
+				
+				for (let i = 0; i < maxGroups && i * 2 < shuffled.length; i++) {
+					const teamA = shuffled[i * 2];
+					const teamB = shuffled[i * 2 + 1] || null;
+					const order = i + 1;
+					
+					const title = teamB 
+						? `Group ${order}: ${teamA.name} vs ${teamB.name}`
+						: `Group ${order}: ${teamA.name}`;
+					
+					// Create new group
+					const group = await pb.collection('groups').create({
+						order: order,
+						title: title,
+						team_a: teamA.id,
+						team_b: teamB?.id || null,
+						starting_hole: 1
+					});
+					
+					newGroupIds.push(group.id);
+				}
+				
+				// Link new groups to tournament
+				await pb.collection('tournaments').update(tournament.id, {
+					groups: newGroupIds
+				});
+				
+				console.log(`✅ Created ${newGroupIds.length} unique groups for tournament: ${tournament.name}`);
+			}
+
+			console.log(`✅ Created unique groups for ${tournaments.length} tournaments`);
+			
+			// Reload current tournament
+			await loadTournament();
+		} catch (err: any) {
+			console.error('Error linking groups to all tournaments:', err);
+			error = 'Failed to link groups to all tournaments: ' + err.message;
+		} finally {
+			linkingGroups = false;
 		}
 	}
 
@@ -346,6 +467,72 @@
 						</div>
 					</div>
 					<p class="text-xs text-gray-500">Coordinates will be used for future mapping features</p>
+				</div>
+
+				<div class="space-y-4 border-t pt-6">
+					<h3 class="font-semibold text-black flex items-center gap-2">
+						<Users class="h-5 w-5" />
+						Groups Management
+					</h3>
+					
+					<div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+						<p class="text-sm text-blue-900 mb-3">
+							<strong>Current Groups:</strong> {tournament?.expand?.groups?.length || 0} linked
+						</p>
+						
+						{#if tournament?.expand?.groups && tournament.expand.groups.length > 0}
+							<div class="space-y-2 mb-4">
+								{#each tournament.expand.groups as group, i}
+									<div class="bg-white rounded p-2 text-sm">
+										<span class="font-semibold text-blue-900">#{group.order || i + 1}:</span>
+										<span class="text-gray-700">{group.title || 'Untitled Group'}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+
+						<div class="flex gap-2">
+							<Button
+								type="button"
+								onclick={autoLinkGroups}
+								disabled={linkingGroups || groups.length === 0}
+								variant="outline"
+								class="bg-blue-600 hover:bg-blue-700 text-white"
+							>
+								{#if linkingGroups}
+									Linking...
+								{:else}
+									🔗 Link Existing Groups to This Tournament
+								{/if}
+							</Button>
+
+							<Button
+								type="button"
+								onclick={autoLinkAllTournaments}
+								disabled={linkingGroups}
+								variant="outline"
+								class="bg-purple-600 hover:bg-purple-700 text-white"
+							>
+								{#if linkingGroups}
+									Creating Groups...
+								{:else}
+									🎲 Create Random Groups for All Next/Upcoming
+								{/if}
+							</Button>
+						</div>
+
+						<p class="text-xs text-blue-700 mt-3">
+							<strong>Link Existing:</strong> Uses current groups (same matchups). <strong>Create Random:</strong> Creates NEW groups with random matchups for each tournament. 
+							<a href="/admin/groups" class="underline">Manage groups →</a>
+						</p>
+					</div>
+
+					<div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600">
+						<p><strong>Available Groups:</strong> {groups.filter(g => g.order >= 1 && g.order <= 6).length} groups with valid order (1-6)</p>
+						{#if groups.filter(g => g.order >= 1 && g.order <= 6).length === 0}
+							<p class="text-orange-600 mt-1">⚠️ No groups found. Please create groups first in the Groups page.</p>
+						{/if}
+					</div>
 				</div>
 
 				{#if error}

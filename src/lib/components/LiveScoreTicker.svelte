@@ -8,15 +8,17 @@
 		total_strokes: number;
 		position: number;
 		is_cut: boolean;
+		current_hole?: number;
 		expand?: {
 			golfer?: {
 				id: string;
 				name: string;
 				country: string;
 			};
-			tournament_rounds?: {
+			tournament?: {
 				id: string;
-				round_number: number;
+				name: string;
+				holes?: number;
 			};
 		};
 	}
@@ -25,6 +27,7 @@
 	let loading = true;
 	let error: string | null = null;
 	let unsubscribe: (() => void) | null = null;
+	let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Format score to par display
 	function formatScoreToPar(score: number): string {
@@ -34,10 +37,24 @@
 
 	// Get color class based on score
 	function getScoreColor(score: number): string {
-		if (score < -2) return 'text-red-600 font-bold'; // Eagle or better
-		if (score < 0) return 'text-red-500'; // Birdie
-		if (score === 0) return 'text-white'; // Par
-		return 'text-blue-400'; // Bogey or worse
+		if (score < -2) return 'text-yellow-300 font-bold text-xl'; // Eagle or better
+		if (score < 0) return 'text-yellow-200 font-bold text-xl'; // Birdie (under par)
+		if (score === 0) return 'text-white font-semibold text-lg'; // Par
+		return 'text-red-300 font-semibold text-lg'; // Bogey or worse (over par)
+	}
+
+	// Format hole status
+	function formatHoleStatus(score: GolferScore): string {
+		if (!score.current_hole) return '';
+		
+		// Assume 18 holes unless we have tournament data
+		const totalHoles = 18;
+		
+		if (score.current_hole >= totalHoles) {
+			return 'Final';
+		}
+		
+		return `after hole ${score.current_hole}`;
 	}
 
 	async function loadScores() {
@@ -45,16 +62,20 @@
 			loading = true;
 			error = null;
 
+			// Load golfer scores with golfer and tournament expanded
 			const records = await pb.collection('golfer_scores').getFullList<GolferScore>({
 				sort: 'score,position',
-				expand: 'golfer,tournament_rounds',
+				expand: 'golfer,tournament',
 				filter: 'is_cut = false'
 			});
 
 			scores = records;
 		} catch (err: any) {
 			console.error('Error loading live scores:', err);
-			error = err.message;
+			// Don't show error if collection doesn't exist yet (404) or auto-cancelled (0)
+			if (err.status !== 404 && err.status !== 0) {
+				error = err.message;
+			}
 		} finally {
 			loading = false;
 		}
@@ -63,14 +84,20 @@
 	onMount(async () => {
 		await loadScores();
 
-		// Subscribe to real-time updates
+		// Subscribe to real-time updates (only if collection exists)
 		try {
 			unsubscribe = await pb.collection('golfer_scores').subscribe('*', async (e) => {
-				// Reload all scores to get updated expand data
-				await loadScores();
+				// Debounce rapid updates
+				if (loadTimeout) clearTimeout(loadTimeout);
+				loadTimeout = setTimeout(async () => {
+					await loadScores();
+				}, 500);
 			});
-		} catch (err) {
-			console.error('Error subscribing to live scores:', err);
+		} catch (err: any) {
+			// Silently fail if collection doesn't exist yet
+			if (err.status !== 404 && err.status !== 0) {
+				console.error('Error subscribing to live scores:', err);
+			}
 		}
 
 		// Refresh scores every 30 seconds as fallback
@@ -78,6 +105,7 @@
 
 		return () => {
 			clearInterval(interval);
+			if (loadTimeout) clearTimeout(loadTimeout);
 		};
 	});
 
@@ -107,35 +135,45 @@
 				<div class="ticker-content">
 					{#each scores as score}
 						{#if score.expand?.golfer}
-							<div class="ticker-item inline-flex items-center mx-6">
-								<span class="font-semibold">{score.expand.golfer.name}</span>
+							<div class="ticker-item inline-flex items-center mx-6 gap-2">
+								<span class="font-semibold text-base">{score.expand.golfer.name}</span>
 								{#if score.expand.golfer.country}
-									<span class="mx-1 text-xs text-gray-300">({score.expand.golfer.country})</span>
+									<span class="text-xs text-gray-300">({score.expand.golfer.country})</span>
 								{/if}
-								<span class="mx-2">•</span>
-								<span class={getScoreColor(score.score)}>
+								<span class="text-gray-400">•</span>
+								<span class={getScoreColor(score.score) + ' px-3 py-1 rounded-md bg-black/40 shadow-lg'}>
 									{formatScoreToPar(score.score)}
 								</span>
-								<span class="mx-2 text-gray-300 text-sm">
-									{#if score.position}
+								{#if formatHoleStatus(score)}
+									<span class="text-gray-300 text-sm italic">
+										{formatHoleStatus(score)}
+									</span>
+								{/if}
+								{#if score.position}
+									<span class="text-gray-300 text-sm font-medium">
 										T{score.position}
-									{/if}
-								</span>
+									</span>
+								{/if}
 							</div>
 						{/if}
 					{/each}
 					<!-- Duplicate for seamless loop -->
 					{#each scores as score}
 						{#if score.expand?.golfer}
-							<div class="ticker-item inline-flex items-center mx-6">
-								<span class="font-semibold">{score.expand.golfer.name}</span>
+							<div class="ticker-item inline-flex items-center mx-6 gap-2">
+								<span class="font-semibold text-base">{score.expand.golfer.name}</span>
 								{#if score.expand.golfer.country}
-									<span class="mx-1 text-xs text-gray-300">({score.expand.golfer.country})</span>
+									<span class="text-xs text-gray-300">({score.expand.golfer.country})</span>
 								{/if}
-								<span class="mx-2">•</span>
-								<span class={getScoreColor(score.score)}>
+								<span class="text-gray-400">•</span>
+								<span class={getScoreColor(score.score) + ' px-3 py-1 rounded-md bg-black/40 shadow-lg'}>
 									{formatScoreToPar(score.score)}
 								</span>
+								{#if formatHoleStatus(score)}
+									<span class="text-gray-300 text-sm italic">
+										{formatHoleStatus(score)}
+									</span>
+								{/if}
 								<span class="mx-2 text-gray-300 text-sm">
 									{#if score.position}
 										T{score.position}

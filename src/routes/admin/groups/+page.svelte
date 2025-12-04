@@ -17,6 +17,9 @@
 	let loading = $state(true);
 	let error = $state('');
 	let showCreateDialog = $state(false);
+	let showRandomAssignDialog = $state(false);
+	let showDeleteDialog = $state(false);
+	let groupToDelete = $state<string | null>(null);
 	let saving = $state(false);
 	let draggedTeam = $state<any>(null);
 	let draggedFromGroup = $state<string | null>(null);
@@ -31,6 +34,15 @@
 	async function loadData() {
 		try {
 			loading = true;
+			error = '';
+
+			// Check if user is authenticated
+			if (!pb.authStore.isValid) {
+				error = 'You must be logged in to access this page.';
+				loading = false;
+				return;
+			}
+
 			const [groupsData, teamsData] = await Promise.all([
 				pb.collection('groups').getFullList({
 					sort: 'order,created',
@@ -38,7 +50,8 @@
 				}),
 				pb.collection('teams').getFullList({
 					sort: 'name',
-					expand: 'male_golfer,female_golfer'
+					expand: 'male_golfer,female_golfer',
+					filter: 'reserves = false || reserves = ""'
 				})
 			]);
 
@@ -55,7 +68,15 @@
 			availableTeams = teams.filter(t => !assignedTeamIds.has(t.id));
 		} catch (err: any) {
 			console.error('Error loading data:', err);
-			error = err.message;
+			
+			// Provide helpful error messages
+			if (err.status === 403) {
+				error = 'Access denied. The PocketBase collection rules need to be updated. Please set the "groups" collection List Rule to: @request.auth.id != ""';
+			} else if (err.status === 401) {
+				error = 'You must be logged in to access this page.';
+			} else {
+				error = err.message;
+			}
 		} finally {
 			loading = false;
 		}
@@ -94,17 +115,25 @@
 		}
 	}
 
-	async function handleDelete(id: string) {
-		if (!confirm('Are you sure you want to delete this group?')) {
-			return;
-		}
+	function openDeleteDialog(id: string) {
+		groupToDelete = id;
+		showDeleteDialog = true;
+	}
+
+	async function confirmDelete() {
+		if (!groupToDelete) return;
 
 		try {
-			await pb.collection('groups').delete(id);
+			saving = true;
+			showDeleteDialog = false;
+			await pb.collection('groups').delete(groupToDelete);
 			await loadData();
 		} catch (err: any) {
 			console.error('Error deleting group:', err);
-			alert('Failed to delete group: ' + err.message);
+			error = 'Failed to delete group: ' + err.message;
+		} finally {
+			saving = false;
+			groupToDelete = null;
 		}
 	}
 
@@ -137,36 +166,60 @@
 		}
 	}
 
-	async function randomAssign() {
-		if (!confirm('Randomly assign all available teams to groups? This will clear existing assignments.')) {
+	function openRandomAssignDialog() {
+		const teamCount = teams.length;
+		
+		if (teamCount < 2) {
+			error = 'You need at least 2 teams to create groups.';
 			return;
 		}
 
+		showRandomAssignDialog = true;
+	}
+
+	async function confirmRandomAssign() {
 		try {
 			saving = true;
+			showRandomAssignDialog = false;
 			
-			// Shuffle available teams
-			const shuffled = [...teams].sort(() => Math.random() - 0.5);
+			const teamCount = teams.length;
+			const maxGroups = Math.min(6, Math.floor(teamCount / 2));
 			
-			// Assign to groups (2 teams per group)
-			for (let i = 0; i < groups.length && i * 2 < shuffled.length; i++) {
-				const group = groups[i];
-				const teamA = shuffled[i * 2];
-				const teamB = shuffled[i * 2 + 1] || null;
-				
-				await pb.collection('groups').update(group.id, {
-					team_a: teamA?.id || null,
-					team_b: teamB?.id || null,
-					title: teamB 
-						? `Group ${group.order}: ${teamA.name} vs ${teamB.name}`
-						: `Group ${group.order}: ${teamA.name}`
-				});
+			// Delete all existing groups
+			for (const group of groups) {
+				await pb.collection('groups').delete(group.id);
 			}
 			
+			// Shuffle all teams
+			const shuffled = [...teams].sort(() => Math.random() - 0.5);
+			
+			// Create new groups (2 teams per group, max 6 groups)
+			const newGroups = [];
+			for (let i = 0; i < maxGroups && i * 2 < shuffled.length; i++) {
+				const teamA = shuffled[i * 2];
+				const teamB = shuffled[i * 2 + 1] || null;
+				const order = i + 1; // Order 1-6
+				
+				const title = teamB 
+					? `Group ${order}: ${teamA.name} vs ${teamB.name}`
+					: `Group ${order}: ${teamA.name}`;
+				
+				const group = await pb.collection('groups').create({
+					order: order,
+					title: title,
+					team_a: teamA.id,
+					team_b: teamB?.id || null,
+					starting_hole: 1 // Default starting hole
+				});
+				
+				newGroups.push(group);
+			}
+			
+			console.log(`✅ Created ${newGroups.length} groups with orders 1-${newGroups.length}`);
 			await loadData();
 		} catch (err: any) {
 			console.error('Error random assigning:', err);
-			alert('Failed to assign teams: ' + err.message);
+			error = 'Failed to assign teams: ' + err.message;
 		} finally {
 			saving = false;
 		}
@@ -272,7 +325,7 @@
 			</div>
 			<div class="flex gap-2">
 				<Button
-					onclick={randomAssign}
+					onclick={openRandomAssignDialog}
 					disabled={saving || teams.length === 0}
 					variant="outline"
 					class="bg-purple-600 hover:bg-purple-700 text-white"
@@ -321,6 +374,22 @@
 		<div class="flex items-center justify-center py-20">
 			<div class="animate-pulse text-white text-xl">Loading groups...</div>
 		</div>
+	{:else if error}
+		<div class="bg-red-50 border-2 border-red-200 rounded-xl p-8 text-center">
+			<div class="text-red-600 text-6xl mb-4">⚠️</div>
+			<h3 class="text-xl font-bold text-red-900 mb-2">Access Denied</h3>
+			<p class="text-red-700 mb-4">{error}</p>
+			<div class="bg-white border border-red-200 rounded-lg p-4 text-left text-sm">
+				<p class="font-semibold text-gray-900 mb-2">To fix this issue:</p>
+				<ol class="list-decimal list-inside space-y-1 text-gray-700">
+					<li>Go to <a href="https://pocketbase-production-e678.up.railway.app/_/" target="_blank" class="text-blue-600 underline">PocketBase Admin</a></li>
+					<li>Navigate to <strong>Collections → groups → API Rules</strong></li>
+					<li>Set <strong>List Rule</strong> to: <code class="bg-gray-100 px-2 py-1 rounded">@request.auth.id != ""</code></li>
+					<li>Set <strong>View Rule</strong> to: <code class="bg-gray-100 px-2 py-1 rounded">@request.auth.id != ""</code></li>
+					<li>Click <strong>Save changes</strong></li>
+				</ol>
+			</div>
+		</div>
 	{:else if groups.length === 0}
 		<div class="bg-white rounded-xl p-12 text-center">
 			<Users class="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -358,7 +427,7 @@
 							<Button
 								variant="outline"
 								size="sm"
-								onclick={() => handleDelete(group.id)}
+								onclick={() => openDeleteDialog(group.id)}
 								class="text-red-600 hover:text-red-700 hover:bg-red-50"
 							>
 								<Trash2 class="h-4 w-4" />
@@ -514,5 +583,83 @@
 				</Button>
 			</div>
 		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Random Assign Confirmation Dialog -->
+<Dialog.Root bind:open={showRandomAssignDialog}>
+	<Dialog.Content class="sm:max-w-[500px] bg-white">
+		<Dialog.Header>
+			<Dialog.Title class="text-black">🎲 Random Assign Groups</Dialog.Title>
+			<Dialog.Description class="text-gray-600">
+				Generate random groups from available teams
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="space-y-4">
+			<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+				<p class="text-sm text-yellow-900 mb-2">
+					<strong>This will:</strong>
+				</p>
+				<ul class="list-disc list-inside space-y-1 text-sm text-yellow-800">
+					<li>Delete all existing groups</li>
+					<li>Create {Math.min(6, Math.floor(teams.length / 2))} new groups</li>
+					<li>Randomly assign {teams.length} teams (2 per group)</li>
+					<li>Assign order numbers 1-{Math.min(6, Math.floor(teams.length / 2))} for tournament linking</li>
+				</ul>
+			</div>
+
+			<p class="text-sm text-gray-700">
+				Are you sure you want to proceed? This action cannot be undone.
+			</p>
+		</div>
+
+		<div class="flex justify-end gap-2 mt-4">
+			<Button type="button" variant="outline" onclick={() => (showRandomAssignDialog = false)}>
+				Cancel
+			</Button>
+			<Button
+				type="button"
+				onclick={confirmRandomAssign}
+				disabled={saving}
+				class="bg-purple-600 hover:bg-purple-700 text-white"
+			>
+				{#if saving}
+					Generating...
+				{:else}
+					🎲 Generate Groups
+				{/if}
+			</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Delete Confirmation Dialog -->
+<Dialog.Root bind:open={showDeleteDialog}>
+	<Dialog.Content class="sm:max-w-[425px] bg-white">
+		<Dialog.Header>
+			<Dialog.Title class="text-black">Delete Group</Dialog.Title>
+			<Dialog.Description class="text-gray-600">
+				Are you sure you want to delete this group? This action cannot be undone.
+			</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="flex justify-end gap-2 mt-4">
+			<Button type="button" variant="outline" onclick={() => (showDeleteDialog = false)}>
+				Cancel
+			</Button>
+			<Button
+				type="button"
+				onclick={confirmDelete}
+				disabled={saving}
+				class="bg-red-600 hover:bg-red-700 text-white"
+			>
+				{#if saving}
+					Deleting...
+				{:else}
+					Delete Group
+				{/if}
+			</Button>
+		</div>
 	</Dialog.Content>
 </Dialog.Root>
