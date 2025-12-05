@@ -80,6 +80,16 @@
 						<Trophy class="h-4 w-4" />
 						Fantasy
 					</a>
+					{#if $currentUser?.role === 'player'}
+						<a 
+							href="/player" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<Users class="h-4 w-4" />
+							Dashboard
+						</a>
+					{/if}
 					{#if $currentUser?.role === 'admin'}
 						<a 
 							href="/admin" 

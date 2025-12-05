@@ -32,14 +32,33 @@
 			console.log('🍪 Auth cookie saved');
 			
 			// Redirect users based on role
-			if (authData.record.role === 'admin') {
+			console.log('🔍 Checking role for redirect:', authData.record.role, typeof authData.record.role);
+			console.log('🔍 Full user record:', authData.record);
+			
+			const userRole = authData.record.role;
+			
+			if (!userRole) {
+				console.log('⚠️ No role found on user record');
+			}
+			
+			if (userRole === 'admin') {
 				console.log('🔄 Redirecting to admin dashboard...');
 				window.location.href = '/admin';
 				return;
-			} else if (authData.record.role === 'scorekeeper') {
+			} else if (userRole === 'scorekeeper') {
 				console.log('🔄 Redirecting to scorekeeper dashboard...');
 				window.location.href = '/scorekeeper';
 				return;
+			} else if (userRole === 'player') {
+				console.log('🔄 Redirecting to player dashboard...');
+				window.location.href = '/player';
+				return;
+			} else if (userRole === 'participant') {
+				console.log('⚠️ Deprecated role "participant" - redirecting to dashboard...');
+				window.location.href = '/dashboard';
+				return;
+			} else {
+				console.log('⚠️ No matching role, closing modal. Role was:', userRole);
 			}
 			
 			open = false;
