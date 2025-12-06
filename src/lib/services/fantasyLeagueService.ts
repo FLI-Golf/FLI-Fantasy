@@ -106,6 +106,70 @@ export class FantasyLeagueService {
 	}
 
 	/**
+	 * Process a draft pick - moves golfer from available to fantasy team
+	 * Updates draft_managment field in fantasy_tournament
+	 */
+	async processDraftPick(
+		fantasyTournamentId: string,
+		golferId: string,
+		userId: string
+	): Promise<any> {
+		// Get current draft state
+		const tournament = await this.pb.collection('fantasy_tournament').getOne(fantasyTournamentId);
+		const draftManagement = tournament.draft_managment;
+		
+		// Find the golfer in available_golfers
+		const golferIndex = draftManagement.available_golfers.findIndex((g: any) => g.id === golferId);
+		if (golferIndex === -1) {
+			throw new Error('Golfer not available for draft');
+		}
+		
+		const golfer = draftManagement.available_golfers[golferIndex];
+		
+		// Mark golfer as drafted
+		golfer.drafted = true;
+		golfer.drafted_by = userId;
+		golfer.draft_position = draftManagement.current_pick;
+		golfer.draft_round = draftManagement.current_round;
+		
+		// Update team composition
+		const teamComp = draftManagement.team_compositions[userId];
+		if (golfer.gender === 'male') {
+			teamComp.male_count++;
+		} else {
+			teamComp.female_count++;
+		}
+		teamComp.total_picks++;
+		teamComp.fantasy_team.push(golfer);
+		
+		// Get next drafter
+		const { nextDrafter, nextRound, direction } = this.getNextDrafter(
+			tournament.draft_order,
+			draftManagement.current_pick,
+			draftManagement.current_round
+		);
+		
+		// Update draft state
+		draftManagement.current_pick = draftManagement.current_pick + 1;
+		draftManagement.current_round = nextRound;
+		draftManagement.current_drafter = nextDrafter;
+		draftManagement.draft_direction = direction;
+		
+		// Check if draft is completed (4 rounds * number of participants)
+		const totalPicks = tournament.draft_order.length * 4;
+		if (draftManagement.current_pick >= totalPicks) {
+			draftManagement.draft_completed = true;
+		}
+		
+		// Update tournament
+		await this.pb.collection('fantasy_tournament').update(fantasyTournamentId, {
+			draft_managment: draftManagement
+		});
+		
+		return draftManagement;
+	}
+
+	/**
 	 * Create a new fantasy league owned by ownerUserId
 	 */
 	async createFantasyLeague(
@@ -593,11 +657,12 @@ export class FantasyLeagueService {
 					available_golfers: golfers.map(g => ({
 						id: g.id,
 						name: g.name,
-						team: g.team,
-						gender: g.gender || 'male', // Assuming golfers have gender field
+						team: g.team, // Team name/info for display
+						gender: g.gender || 'male',
 						drafted: false,
 						drafted_by: null,
 						draft_position: null,
+						draft_round: null,
 						recommended: false // Will be set dynamically during draft
 					})),
 					current_pick: 0,
@@ -611,7 +676,7 @@ export class FantasyLeagueService {
 							male_count: 0,
 							female_count: 0,
 							total_picks: 0,
-							picks: []
+							fantasy_team: [] // Array of drafted golfers for this participant
 						};
 						return acc;
 					}, {} as Record<string, any>)
@@ -621,7 +686,7 @@ export class FantasyLeagueService {
 				const fantasySettings = {
 					start_pause: false, // true = paused, false = running
 					pick_duration_seconds: 60, // 60 seconds per pick
-					rounds: settings?.rounds || 5,
+					rounds: 4, // 4 rounds total
 					auto_draft_enabled: true
 				};
 
