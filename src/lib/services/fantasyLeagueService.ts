@@ -271,6 +271,10 @@ export class FantasyLeagueService {
 		const settings = (league.settings as FantasySettings) || defaultSettings;
 		console.log('League settings:', JSON.stringify(settings, null, 2));
 
+		// IMPORTANT: Re-fetch the participant we just approved to ensure it's in the count
+		// There might be a timing issue where the update hasn't propagated yet
+		await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to ensure DB consistency
+		
 		// Count approved participants
 		const approvedParticipants = await this.pb.collection('fantasy_season_participants').getFullList({
 			filter: `league = "${leagueId}" && status = "approved"`
@@ -284,6 +288,7 @@ export class FantasyLeagueService {
 		console.log(`Total participants in league: ${allParticipants.length}`);
 		console.log('Participant statuses:', allParticipants.map(p => ({ user: p.user, status: p.status, is_owner: p.is_owner })));
 		console.log(`Approved participants: ${approvedParticipants.length}/${settings.min_participants || 6}`);
+		console.log('Approved participant IDs:', approvedParticipants.map(p => p.id));
 		console.log('Current fantasy_tournaments:', league.fantasy_tournaments);
 		console.log('Auto-generate enabled:', settings.auto_generate_tournaments);
 
