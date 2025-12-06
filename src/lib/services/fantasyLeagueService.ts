@@ -129,8 +129,6 @@ export class FantasyLeagueService {
 		// Mark golfer as drafted
 		golfer.drafted = true;
 		golfer.drafted_by = userId;
-		golfer.draft_position = draftManagement.current_pick;
-		golfer.draft_round = draftManagement.current_round;
 		
 		// Update team composition
 		const teamComp = draftManagement.team_compositions[userId];
@@ -622,6 +620,7 @@ export class FantasyLeagueService {
 
 				// Get golfers from teams where reserves = false
 				let golfers = [];
+				const golferTeamMap = new Map(); // Map golfer ID to team ID
 				try {
 					// First get all teams for this tournament where reserves = false
 					const teams = await this.pb.collection('teams').getFullList({
@@ -629,11 +628,17 @@ export class FantasyLeagueService {
 						expand: 'male_golfer,female_golfer'
 					});
 					
-					// Extract golfer IDs from teams (both male and female)
+					// Extract golfer IDs from teams and map them to team IDs
 					const golferIds: string[] = [];
 					teams.forEach(team => {
-						if (team.male_golfer) golferIds.push(team.male_golfer);
-						if (team.female_golfer) golferIds.push(team.female_golfer);
+						if (team.male_golfer) {
+							golferIds.push(team.male_golfer);
+							golferTeamMap.set(team.male_golfer, team.id);
+						}
+						if (team.female_golfer) {
+							golferIds.push(team.female_golfer);
+							golferTeamMap.set(team.female_golfer, team.id);
+						}
 					});
 					
 					// Remove duplicates
@@ -657,12 +662,11 @@ export class FantasyLeagueService {
 					available_golfers: golfers.map(g => ({
 						id: g.id,
 						name: g.name,
-						team: g.team, // Team name/info for display
+						team: g.team, // Team name for display
+						team_id: golferTeamMap.get(g.id) || null, // Team ID reference
 						gender: g.gender || 'male',
 						drafted: false,
 						drafted_by: null,
-						draft_position: null,
-						draft_round: null,
 						recommended: false // Will be set dynamically during draft
 					})),
 					current_pick: 0,
@@ -683,9 +687,10 @@ export class FantasyLeagueService {
 				};
 
 				// Create fantasy settings for draft
+				// Pick duration options: 10, 15, or 30 seconds
 				const fantasySettings = {
 					start_pause: false, // true = paused, false = running
-					pick_duration_seconds: 60, // 60 seconds per pick
+					pick_duration_seconds: 30, // Options: 10, 15, or 30 seconds per pick
 					rounds: 4, // 4 rounds total
 					auto_draft_enabled: true
 				};
