@@ -69,18 +69,23 @@
 				</Button>
 			</form>
 		{:else if data.userStatus?.status === 'pending'}
-			<div class="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-				<p class="text-sm text-yellow-700 flex items-center gap-2">
-					<Clock class="h-4 w-4" />
-					Request Pending
+			<div class="px-6 py-3 bg-yellow-50 border-2 border-yellow-400 rounded-lg shadow-lg">
+				<p class="text-lg font-bold text-yellow-700 flex items-center gap-2">
+					<Clock class="h-6 w-6" />
+					Request Pending - Awaiting Owner Approval
 				</p>
 			</div>
 		{:else if data.userStatus?.status === 'approved'}
-			<div class="px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-				<p class="text-sm text-green-700 flex items-center gap-2">
-					<Check class="h-4 w-4" />
-					You're in this league
-				</p>
+			<div class="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg shadow-xl">
+				<div class="flex items-center gap-3">
+					<div class="p-2 bg-green-500 rounded-full">
+						<Check class="h-6 w-6 text-white" />
+					</div>
+					<div>
+						<p class="text-xl font-bold text-green-800">You're in this league!</p>
+						<p class="text-sm text-green-600">You can now participate in all tournaments</p>
+					</div>
+				</div>
 			</div>
 		{/if}
 	</div>
