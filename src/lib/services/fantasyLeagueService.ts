@@ -30,6 +30,82 @@ export class FantasyLeagueService {
 	}
 
 	/**
+	 * Calculate recommended pick based on team composition and draft rules
+	 * Filters available golfers based on gender balance requirements
+	 */
+	getRecommendedPick(
+		availableGolfers: any[],
+		teamComposition: { male_count: number; female_count: number; total_picks: number },
+		currentRound: number,
+		totalRounds: number
+	): { recommendedGolfer: any | null; filteredGolfers: any[] } {
+		let filteredGolfers = availableGolfers.filter(g => !g.drafted);
+
+		// Apply gender filtering for rounds 3 and beyond
+		if (currentRound >= 3) {
+			const { male_count, female_count } = teamComposition;
+			const picksRemaining = totalRounds - teamComposition.total_picks;
+			
+			// Calculate how many of each gender we need for balance
+			const totalPicks = teamComposition.total_picks + picksRemaining;
+			const targetMales = Math.floor(totalPicks / 2);
+			const targetFemales = Math.ceil(totalPicks / 2);
+			
+			// If we already have enough males, only show females
+			if (male_count >= targetMales) {
+				filteredGolfers = filteredGolfers.filter(g => g.gender === 'female');
+			}
+			// If we already have enough females, only show males
+			else if (female_count >= targetFemales) {
+				filteredGolfers = filteredGolfers.filter(g => g.gender === 'male');
+			}
+		}
+
+		// Select recommended golfer (first available after filtering)
+		const recommendedGolfer = filteredGolfers.length > 0 ? filteredGolfers[0] : null;
+
+		return { recommendedGolfer, filteredGolfers };
+	}
+
+	/**
+	 * Get next drafter in snake draft order
+	 */
+	getNextDrafter(
+		draftOrder: string[],
+		currentPick: number,
+		currentRound: number
+	): { nextDrafter: string; nextRound: number; direction: 'down' | 'up' } {
+		const totalParticipants = draftOrder.length;
+		const direction = currentRound % 2 === 1 ? 'down' : 'up';
+		
+		let nextPick = currentPick + 1;
+		let nextRound = currentRound;
+		
+		// Check if we've completed the round
+		if (nextPick >= totalParticipants) {
+			nextPick = 0;
+			nextRound++;
+		}
+		
+		// Calculate drafter index based on snake draft
+		let drafterIndex;
+		if (direction === 'down') {
+			drafterIndex = nextPick;
+		} else {
+			// Reverse order for even rounds
+			drafterIndex = totalParticipants - 1 - nextPick;
+		}
+		
+		const nextDirection = nextRound % 2 === 1 ? 'down' : 'up';
+		
+		return {
+			nextDrafter: draftOrder[drafterIndex],
+			nextRound,
+			direction: nextDirection
+		};
+	}
+
+	/**
 	 * Create a new fantasy league owned by ownerUserId
 	 */
 	async createFantasyLeague(
@@ -497,14 +573,27 @@ export class FantasyLeagueService {
 						id: g.id,
 						name: g.name,
 						team: g.team,
+						gender: g.gender || 'male', // Assuming golfers have gender field
 						drafted: false,
 						drafted_by: null,
-						draft_position: null
+						draft_position: null,
+						recommended: false // Will be set dynamically during draft
 					})),
 					current_pick: 0,
+					current_round: 1,
 					current_drafter: draftOrder[0],
+					draft_direction: 'down', // 'down' for odd rounds, 'up' for even rounds (snake draft)
 					draft_started: false,
-					draft_completed: false
+					draft_completed: false,
+					team_compositions: draftOrder.reduce((acc, userId) => {
+						acc[userId] = {
+							male_count: 0,
+							female_count: 0,
+							total_picks: 0,
+							picks: []
+						};
+						return acc;
+					}, {} as Record<string, any>)
 				};
 
 				// Create fantasy settings for draft
