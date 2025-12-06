@@ -12,6 +12,7 @@
 	import Brackets from '@lucide/svelte/icons/brackets';
 	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 
 	let { data, form } = $props();
 
@@ -59,6 +60,8 @@
 					return async ({ result, update }) => {
 						console.log('📥 Join request result:', result);
 						await update();
+						// Force reload all data to get updated userStatus
+						await invalidateAll();
 					};
 				}}
 			>
