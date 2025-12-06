@@ -8,6 +8,7 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import Crown from '@lucide/svelte/icons/crown';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -61,11 +62,12 @@
 			>
 				<Button 
 					type="submit" 
-					size="lg"
-					class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-emerald-600 hover:to-green-500 text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+					class="px-8 py-6 text-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-emerald-600 hover:to-green-500 text-white font-bold shadow-2xl hover:shadow-3xl transition-all transform hover:scale-110 rounded-xl"
 				>
-					<UserPlus class="h-5 w-5 mr-2" />
-					Request to Join League
+					<span class="flex items-center gap-3">
+						Request to Join League
+						<ArrowRight class="h-7 w-7 animate-pulse" />
+					</span>
 				</Button>
 			</form>
 		{:else if data.userStatus?.status === 'pending'}
