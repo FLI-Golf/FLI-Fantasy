@@ -62,7 +62,7 @@
 				<Button 
 					type="submit" 
 					size="lg"
-					class="bg-gradient-to-r from-[#2F91F6] to-blue-600 hover:from-blue-600 hover:to-[#2F91F6] text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+					class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-emerald-600 hover:to-green-500 text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
 				>
 					<UserPlus class="h-5 w-5 mr-2" />
 					Request to Join League
