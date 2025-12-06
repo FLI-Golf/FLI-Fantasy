@@ -268,7 +268,8 @@ export class FantasyLeagueService {
 			auto_generate_tournaments: true
 		};
 		
-		const settings = (league.settings as FantasySettings) || defaultSettings;
+		// Use nullish coalescing to handle both null and undefined
+		const settings = (league.settings as FantasySettings) ?? defaultSettings;
 		console.log('League settings:', JSON.stringify(settings, null, 2));
 
 		// IMPORTANT: Re-fetch the participant we just approved to ensure it's in the count
@@ -417,7 +418,17 @@ export class FantasyLeagueService {
 	 */
 	async generateFantasyTournaments(leagueId: string): Promise<FantasyTournament[]> {
 		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
-		const settings = league.settings as FantasySettings;
+		
+		// Default settings if not set
+		const defaultSettings: FantasySettings = {
+			start_pause_interval: 60,
+			rounds: 5,
+			check_gender: false,
+			min_participants: 6,
+			auto_generate_tournaments: true
+		};
+		
+		const settings = (league.settings as FantasySettings) ?? defaultSettings;
 		
 		// Get all approved participants for this league
 		const approvedParticipants = await this.pb.collection('fantasy_season_participants').getFullList({
