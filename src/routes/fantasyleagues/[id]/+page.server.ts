@@ -21,6 +21,9 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			expand: 'fantasy_tournaments'
 		});
 		
+		console.log('League fantasy_tournaments field:', leagueRecord.fantasy_tournaments);
+		console.log('Expanded fantasy_tournaments:', leagueRecord.expand?.fantasy_tournaments);
+		
 		const participants = await leagueService.getLeagueParticipants(leagueId);
 		const isOwner = userId ? await leagueService.isLeagueOwner(leagueId, userId) : false;
 		const userStatus = userId ? await leagueService.getUserParticipationStatus(leagueId, userId) : null;
@@ -44,7 +47,8 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 				try {
 					const user = await pb.collection('users').getOne(p.user);
 					return { ...p, expand: { user } };
-				} catch {
+				} catch (error) {
+					console.error(`Failed to expand user ${p.user}:`, error);
 					return p;
 				}
 			})

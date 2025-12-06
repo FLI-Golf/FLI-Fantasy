@@ -22,6 +22,14 @@
 
 	// Debug logging
 	$effect(() => {
+		console.log('📊 Approved participants:', approvedParticipants);
+		approvedParticipants.forEach((p, i) => {
+			console.log(`${i + 1}. User:`, p.expand?.user);
+		});
+	});
+
+	// Debug logging
+	$effect(() => {
 		if (form) {
 			console.log('📋 Form response:', form);
 			if (form.error) {
@@ -241,7 +249,7 @@
 										</div>
 										<div>
 											<p class="font-semibold text-black">
-												{request.expand?.user?.name || 'Unknown User'}
+												{request.expand?.user?.name || request.expand?.user?.email || 'Unknown User'}
 											</p>
 											<p class="text-sm text-gray-600">
 												{request.expand?.user?.email || ''}
@@ -296,12 +304,12 @@
 								<div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
 									<div class="h-10 w-10 rounded-full bg-black flex items-center justify-center">
 										<span class="text-white font-semibold">
-											{participant.expand?.user?.name?.[0]?.toUpperCase() || 'U'}
+											{(participant.expand?.user?.name || participant.expand?.user?.email)?.[0]?.toUpperCase() || 'P'}
 										</span>
 									</div>
 									<div class="flex-1">
 										<p class="font-semibold text-black flex items-center gap-2">
-											{participant.expand?.user?.name || 'Unknown User'}
+											{participant.expand?.user?.name || participant.expand?.user?.email || 'Unknown User'}
 											{#if participant.is_owner}
 												<Crown class="h-4 w-4 text-yellow-600" />
 											{/if}
