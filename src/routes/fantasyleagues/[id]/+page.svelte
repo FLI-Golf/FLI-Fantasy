@@ -100,12 +100,14 @@
 		<Card.Root class="border-2 border-green-200 bg-green-50">
 			<Card.Content class="p-4">
 				<p class="text-green-700 flex items-center gap-2">
-					<Check class="h-4 w-4" />
 					{#if form.action === 'approved'}
+						<Check class="h-5 w-5" />
 						Participant approved successfully!
 					{:else if form.action === 'rejected'}
+						<X class="h-5 w-5" />
 						Request rejected.
 					{:else if form.action === 'requested'}
+						<Clock class="h-5 w-5 animate-pulse" />
 						Join request sent! Waiting for owner approval.
 					{/if}
 				</p>
