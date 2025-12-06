@@ -10,6 +10,7 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Brackets from '@lucide/svelte/icons/brackets';
+	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -66,7 +67,7 @@
 					class="w-full md:w-auto px-12 py-8 bg-gradient-to-br from-green-500 via-emerald-600 to-green-700 hover:from-emerald-600 hover:via-green-600 hover:to-emerald-700 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 border-2 border-green-400"
 				>
 					<div class="flex flex-col items-center gap-3">
-						<Brackets class="h-12 w-12 animate-pulse" />
+						<GitBranch class="h-12 w-12 animate-pulse" />
 						<span class="text-2xl font-bold">Request to Join League</span>
 						<span class="text-sm opacity-90">Click to send your join request</span>
 					</div>
