@@ -171,27 +171,69 @@ export class FantasyLeagueService {
 	 * Request to join a league (creates pending participant)
 	 */
 	async requestToJoin(leagueId: string, userId: string): Promise<FantasySeasonParticipant> {
+		console.log('🎯 REQUEST TO JOIN');
+		console.log('League ID:', leagueId);
+		console.log('User ID:', userId);
+		
 		// Check if user already has a participant record for this league
 		const existing = await this.pb.collection('fantasy_season_participants').getFullList({
 			filter: `user = "${userId}" && league = "${leagueId}"`
 		});
 
 		if (existing.length > 0) {
+			console.log('✅ User already has a participant record');
 			return fantasySeasonParticipantSchema.parse(existing[0]);
 		}
 
 		// Create new participant record with pending status
-		const participantPayload = {
+		const participantPayload: any = {
 			user: userId,
 			league: leagueId,
 			status: 'pending',
-			is_owner: false,
+			is_owner: false as boolean,  // Explicitly cast to boolean
 			joined_at: new Date().toISOString(),
 			total_points: 0
 		};
 
-		const created = await this.pb.collection('fantasy_season_participants').create(participantPayload);
-		return fantasySeasonParticipantSchema.parse(created);
+		console.log('📝 Creating participant record in collection: fantasy_season_participants');
+		console.log('Payload:', JSON.stringify(participantPayload, null, 2));
+
+		try {
+			const created = await this.pb.collection('fantasy_season_participants').create(participantPayload);
+			console.log('✅ Participant record created:', created.id);
+			return fantasySeasonParticipantSchema.parse(created);
+		} catch (error: any) {
+			console.error('❌ Error creating participant record in fantasy_season_participants:');
+			console.error('Error type:', typeof error);
+			console.error('Error message:', error.message);
+			console.error('Error status:', error.status);
+			
+			// Log the detailed validation errors from PocketBase
+			if (error.data) {
+				console.error('Validation errors:');
+				console.error(JSON.stringify(error.data, null, 2));
+			}
+			
+			if (error.response) {
+				console.error('Response:');
+				console.error(JSON.stringify(error.response, null, 2));
+			}
+			
+			// Log the original error object
+			console.error('Original error object:', error);
+			
+			// Extract specific field errors if available
+			if (error.data?.data) {
+				console.error('\n🔍 Field-specific errors:');
+				Object.keys(error.data.data).forEach(field => {
+					console.error(`  ${field}:`, error.data.data[field]);
+				});
+			}
+			
+			// Re-throw with more context
+			const detailedMessage = error.data?.message || error.message || 'Unknown error';
+			throw new Error(`Failed to create participant record: ${detailedMessage}`);
+		}
 	}
 
 	/**
@@ -216,7 +258,17 @@ export class FantasyLeagueService {
 
 		// Check if we should generate fantasy tournaments
 		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
-		const settings = league.settings as FantasySettings;
+		
+		// Default settings if not set
+		const defaultSettings: FantasySettings = {
+			start_pause_interval: 60,
+			rounds: 5,
+			check_gender: false,
+			min_participants: 6,
+			auto_generate_tournaments: true
+		};
+		
+		const settings = (league.settings as FantasySettings) || defaultSettings;
 		console.log('League settings:', JSON.stringify(settings, null, 2));
 
 		// Count approved participants
@@ -224,29 +276,54 @@ export class FantasyLeagueService {
 			filter: `league = "${leagueId}" && status = "approved"`
 		});
 		
-		console.log(`Approved participants: ${approvedParticipants.length}/${settings.min_participants}`);
+		// Also get all participants to debug
+		const allParticipants = await this.pb.collection('fantasy_season_participants').getFullList({
+			filter: `league = "${leagueId}"`
+		});
+		
+		console.log(`Total participants in league: ${allParticipants.length}`);
+		console.log('Participant statuses:', allParticipants.map(p => ({ user: p.user, status: p.status, is_owner: p.is_owner })));
+		console.log(`Approved participants: ${approvedParticipants.length}/${settings.min_participants || 6}`);
 		console.log('Current fantasy_tournaments:', league.fantasy_tournaments);
 		console.log('Auto-generate enabled:', settings.auto_generate_tournaments);
 
 		let tournamentsGenerated = false;
 
+		const minParticipants = settings.min_participants || 6;
+		const autoGenerate = settings.auto_generate_tournaments !== false; // Default to true
+
 		// If we've reached minimum and auto-generate is on, create tournaments
-		if (approvedParticipants.length >= settings.min_participants && 
-		    settings.auto_generate_tournaments &&
+		if (approvedParticipants.length >= minParticipants && 
+		    autoGenerate &&
 		    (!league.fantasy_tournaments || league.fantasy_tournaments.length === 0)) {
 			console.log('🚀 TRIGGERING TOURNAMENT GENERATION!');
-			console.log(`Minimum participants reached (${approvedParticipants.length}/${settings.min_participants})`);
+			console.log(`Minimum participants reached (${approvedParticipants.length}/${minParticipants})`);
 			await this.generateFantasyTournaments(leagueId);
 			tournamentsGenerated = true;
 		} else {
 			console.log('❌ NOT generating tournaments:');
-			console.log('  - Enough participants?', approvedParticipants.length >= settings.min_participants);
-			console.log('  - Auto-generate on?', settings.auto_generate_tournaments);
+			console.log('  - Enough participants?', approvedParticipants.length >= minParticipants);
+			console.log('  - Auto-generate on?', autoGenerate);
 			console.log('  - No tournaments yet?', !league.fantasy_tournaments || league.fantasy_tournaments.length === 0);
 		}
 		console.log('═══════════════════════════════════════');
 
 		return { participant, tournamentsGenerated };
+	}
+
+	/**
+	 * Reject a participant request
+	 */
+	async rejectParticipant(participantId: string): Promise<void> {
+		console.log('❌ REJECTING PARTICIPANT');
+		console.log('Participant ID:', participantId);
+		
+		// Update participant status to rejected
+		await this.pb.collection('fantasy_season_participants').update(participantId, {
+			status: 'rejected'
+		});
+		
+		console.log('✅ Participant rejected');
 	}
 
 	/**
@@ -301,19 +378,21 @@ export class FantasyLeagueService {
 		leagueId: string,
 		userId: string
 	): Promise<FantasySeasonParticipant | null> {
-		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
-		
-		// Check if user is the owner
-		if (league.league_owner === userId) {
-			if (league.fantasy_participants) {
-				const participant = await this.pb
-					.collection('fantasy_season_participants')
-					.getOne(league.fantasy_participants);
-				return fantasySeasonParticipantSchema.parse(participant);
-			}
-		}
+		try {
+			// Check if user has a participant record for this league
+			const participants = await this.pb.collection('fantasy_season_participants').getFullList({
+				filter: `league = "${leagueId}" && user = "${userId}"`
+			});
 
-		return null;
+			if (participants.length > 0) {
+				return fantasySeasonParticipantSchema.parse(participants[0]);
+			}
+
+			return null;
+		} catch (error) {
+			console.error('Error getting user participation status:', error);
+			return null;
+		}
 	}
 
 	/**

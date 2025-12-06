@@ -36,17 +36,60 @@ export const load: PageServerLoad = async ({ cookies }) => {
 			sort: '-created'
 		});
 
+		// Fetch user's fantasy league participation status
+		const userLeagueParticipation = await pb.collection('fantasy_season_participants').getFullList({
+			filter: `user = "${userId}"`,
+			expand: 'league'
+		});
+
+		const userLeagueIds = userLeagueParticipation.map(p => p.league).filter(Boolean);
+
+		// Fetch all available fantasy leagues
+		const allLeagues = await pb.collection('fantasy_league').getFullList({
+			sort: '-created',
+			expand: 'league_owner'
+		});
+
+		// Filter leagues: exclude ones user is already in or has pending request
+		const availableLeagues = allLeagues.filter(league => !userLeagueIds.includes(league.id));
+
+		// Get participant counts for each league
+		const leaguesWithCounts = await Promise.all(
+			availableLeagues.map(async (league) => {
+				try {
+					const participants = await pb.collection('fantasy_season_participants').getFullList({
+						filter: `league = "${league.id}" && status = "approved"`
+					});
+					return {
+						...league,
+						participant_count: participants.length,
+						settings: league.settings || { min_participants: 6 }
+					};
+				} catch {
+					return {
+						...league,
+						participant_count: 0,
+						settings: league.settings || { min_participants: 6 }
+					};
+				}
+			})
+		);
+
 		return {
 			user: pb.authStore.model,
 			seasons: seasons.map((p) => p.expand?.season).filter(Boolean),
-			teams
+			teams,
+			availableLeagues: leaguesWithCounts,
+			userLeagues: userLeagueParticipation
 		};
 	} catch (error) {
 		console.error('Error loading dashboard:', error);
 		return {
 			user: pb.authStore.model,
 			seasons: [],
-			teams: []
+			teams: [],
+			availableLeagues: [],
+			userLeagues: []
 		};
 	}
 };

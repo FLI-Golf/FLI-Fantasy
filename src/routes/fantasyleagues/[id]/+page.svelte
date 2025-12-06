@@ -8,13 +8,30 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import Crown from '@lucide/svelte/icons/crown';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import Brackets from '@lucide/svelte/icons/brackets';
+	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 
 	let { data, form } = $props();
 
 	const approvedParticipants = $derived(
 		data.participants.filter((p) => p.status === 'approved')
 	);
+
+	// Debug logging
+	$effect(() => {
+		if (form) {
+			console.log('📋 Form response:', form);
+			if (form.error) {
+				console.error('❌ Form error:', form.error);
+			}
+			if (form.success) {
+				console.log('✅ Form success:', form.action);
+			}
+		}
+	});
 </script>
 
 <div class="max-w-7xl mx-auto space-y-6">
@@ -33,25 +50,50 @@
 		</div>
 
 		{#if !data.userStatus && !data.isOwner && data.currentUser}
-			<form method="POST" action="?/join" use:enhance>
-				<Button type="submit" class="bg-[#2F91F6] hover:bg-blue-600 text-white">
-					<UserPlus class="h-4 w-4 mr-2" />
-					Request to Join
-				</Button>
+			<form 
+				method="POST" 
+				action="?/join" 
+				use:enhance={() => {
+					console.log('🚀 Submitting join request...');
+					console.log('League ID:', data.league.id);
+					console.log('User:', data.currentUser?.email);
+					return async ({ result, update }) => {
+						console.log('📥 Join request result:', result);
+						await update();
+						// Force reload all data to get updated userStatus
+						await invalidateAll();
+					};
+				}}
+			>
+				<button 
+					type="submit" 
+					class="w-full md:w-auto px-12 py-8 bg-gradient-to-br from-green-500 via-emerald-600 to-green-700 hover:from-emerald-600 hover:via-green-600 hover:to-emerald-700 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 border-2 border-green-400"
+				>
+					<div class="flex flex-col items-center gap-3">
+						<Trophy class="h-12 w-12 animate-pulse" />
+						<span class="text-2xl font-bold">Request to Join League</span>
+						<span class="text-sm opacity-90">Click to send your join request</span>
+					</div>
+				</button>
 			</form>
 		{:else if data.userStatus?.status === 'pending'}
-			<div class="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-				<p class="text-sm text-yellow-700 flex items-center gap-2">
-					<Clock class="h-4 w-4" />
-					Request Pending
+			<div class="px-6 py-3 bg-yellow-50 border-2 border-yellow-400 rounded-lg shadow-lg">
+				<p class="text-lg font-bold text-yellow-700 flex items-center gap-2">
+					<Clock class="h-6 w-6" />
+					Request Pending - Awaiting Owner Approval
 				</p>
 			</div>
 		{:else if data.userStatus?.status === 'approved'}
-			<div class="px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-				<p class="text-sm text-green-700 flex items-center gap-2">
-					<Check class="h-4 w-4" />
-					You're in this league
-				</p>
+			<div class="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg shadow-xl">
+				<div class="flex items-center gap-3">
+					<div class="p-2 bg-green-500 rounded-full">
+						<Check class="h-6 w-6 text-white" />
+					</div>
+					<div>
+						<p class="text-xl font-bold text-green-800">You're in this league!</p>
+						<p class="text-sm text-green-600">You can now participate in all tournaments</p>
+					</div>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -61,12 +103,14 @@
 		<Card.Root class="border-2 border-green-200 bg-green-50">
 			<Card.Content class="p-4">
 				<p class="text-green-700 flex items-center gap-2">
-					<Check class="h-4 w-4" />
 					{#if form.action === 'approved'}
+						<Check class="h-5 w-5" />
 						Participant approved successfully!
 					{:else if form.action === 'rejected'}
+						<X class="h-5 w-5" />
 						Request rejected.
 					{:else if form.action === 'requested'}
+						<Clock class="h-5 w-5 animate-pulse" />
 						Join request sent! Waiting for owner approval.
 					{/if}
 				</p>
