@@ -258,7 +258,17 @@ export class FantasyLeagueService {
 
 		// Check if we should generate fantasy tournaments
 		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
-		const settings = league.settings as FantasySettings;
+		
+		// Default settings if not set
+		const defaultSettings: FantasySettings = {
+			start_pause_interval: 60,
+			rounds: 5,
+			check_gender: false,
+			min_participants: 6,
+			auto_generate_tournaments: true
+		};
+		
+		const settings = (league.settings as FantasySettings) || defaultSettings;
 		console.log('League settings:', JSON.stringify(settings, null, 2));
 
 		// Count approved participants
@@ -266,24 +276,27 @@ export class FantasyLeagueService {
 			filter: `league = "${leagueId}" && status = "approved"`
 		});
 		
-		console.log(`Approved participants: ${approvedParticipants.length}/${settings.min_participants}`);
+		console.log(`Approved participants: ${approvedParticipants.length}/${settings.min_participants || 6}`);
 		console.log('Current fantasy_tournaments:', league.fantasy_tournaments);
 		console.log('Auto-generate enabled:', settings.auto_generate_tournaments);
 
 		let tournamentsGenerated = false;
 
+		const minParticipants = settings.min_participants || 6;
+		const autoGenerate = settings.auto_generate_tournaments !== false; // Default to true
+
 		// If we've reached minimum and auto-generate is on, create tournaments
-		if (approvedParticipants.length >= settings.min_participants && 
-		    settings.auto_generate_tournaments &&
+		if (approvedParticipants.length >= minParticipants && 
+		    autoGenerate &&
 		    (!league.fantasy_tournaments || league.fantasy_tournaments.length === 0)) {
 			console.log('🚀 TRIGGERING TOURNAMENT GENERATION!');
-			console.log(`Minimum participants reached (${approvedParticipants.length}/${settings.min_participants})`);
+			console.log(`Minimum participants reached (${approvedParticipants.length}/${minParticipants})`);
 			await this.generateFantasyTournaments(leagueId);
 			tournamentsGenerated = true;
 		} else {
 			console.log('❌ NOT generating tournaments:');
-			console.log('  - Enough participants?', approvedParticipants.length >= settings.min_participants);
-			console.log('  - Auto-generate on?', settings.auto_generate_tournaments);
+			console.log('  - Enough participants?', approvedParticipants.length >= minParticipants);
+			console.log('  - Auto-generate on?', autoGenerate);
 			console.log('  - No tournaments yet?', !league.fantasy_tournaments || league.fantasy_tournaments.length === 0);
 		}
 		console.log('═══════════════════════════════════════');
