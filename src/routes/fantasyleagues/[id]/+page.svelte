@@ -22,6 +22,14 @@
 
 	// Debug logging
 	$effect(() => {
+		console.log('📊 Approved participants:', approvedParticipants);
+		approvedParticipants.forEach((p, i) => {
+			console.log(`${i + 1}. User:`, p.expand?.user);
+		});
+	});
+
+	// Debug logging
+	$effect(() => {
 		if (form) {
 			console.log('📋 Form response:', form);
 			if (form.error) {
