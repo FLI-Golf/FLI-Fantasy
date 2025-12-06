@@ -469,10 +469,47 @@ export class FantasyLeagueService {
 				// Randomize draft order for this tournament
 				const draftOrder = this.shuffleArray(approvedUserIds);
 
+				// Get golfers for this tournament
+				let golfers = [];
+				try {
+					golfers = await this.pb.collection('golfers').getFullList({
+						filter: `tournament = "${tournament.id}"`
+					});
+					console.log(`📊 Found ${golfers.length} golfers for tournament`);
+				} catch (error) {
+					console.error('Error fetching golfers:', error);
+				}
+
+				// Create draft management object with available golfers
+				const draftManagement = {
+					available_golfers: golfers.map(g => ({
+						id: g.id,
+						name: g.name,
+						team: g.team,
+						drafted: false,
+						drafted_by: null,
+						draft_position: null
+					})),
+					current_pick: 0,
+					current_drafter: draftOrder[0],
+					draft_started: false,
+					draft_completed: false
+				};
+
+				// Create fantasy settings for draft
+				const fantasySettings = {
+					start_pause_interval: settings?.start_pause_interval || 60,
+					pick_duration_seconds: 60, // 60 seconds per pick
+					rounds: settings?.rounds || 5,
+					auto_draft_enabled: true
+				};
+
 				const payload: any = {
 					fantasy_league: leagueId,
 					draft_order: draftOrder,
-					draft_results: null
+					draft_results: null,
+					fantasy_settings: fantasySettings,
+					draft_managment: draftManagement // Note: typo in DB field name
 				};
 
 				// Add tournament reference if field exists
