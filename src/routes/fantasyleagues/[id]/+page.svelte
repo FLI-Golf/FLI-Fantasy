@@ -15,6 +15,19 @@
 	const approvedParticipants = $derived(
 		data.participants.filter((p) => p.status === 'approved')
 	);
+
+	// Debug logging
+	$effect(() => {
+		if (form) {
+			console.log('📋 Form response:', form);
+			if (form.error) {
+				console.error('❌ Form error:', form.error);
+			}
+			if (form.success) {
+				console.log('✅ Form success:', form.action);
+			}
+		}
+	});
 </script>
 
 <div class="max-w-7xl mx-auto space-y-6">
@@ -33,10 +46,26 @@
 		</div>
 
 		{#if !data.userStatus && !data.isOwner && data.currentUser}
-			<form method="POST" action="?/join" use:enhance>
-				<Button type="submit" class="bg-[#2F91F6] hover:bg-blue-600 text-white">
-					<UserPlus class="h-4 w-4 mr-2" />
-					Request to Join
+			<form 
+				method="POST" 
+				action="?/join" 
+				use:enhance={() => {
+					console.log('🚀 Submitting join request...');
+					console.log('League ID:', data.league.id);
+					console.log('User:', data.currentUser?.email);
+					return async ({ result, update }) => {
+						console.log('📥 Join request result:', result);
+						await update();
+					};
+				}}
+			>
+				<Button 
+					type="submit" 
+					size="lg"
+					class="bg-gradient-to-r from-[#2F91F6] to-blue-600 hover:from-blue-600 hover:to-[#2F91F6] text-white font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+				>
+					<UserPlus class="h-5 w-5 mr-2" />
+					Request to Join League
 				</Button>
 			</form>
 		{:else if data.userStatus?.status === 'pending'}

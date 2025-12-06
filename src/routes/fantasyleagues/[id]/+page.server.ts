@@ -50,6 +50,21 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			})
 		);
 
+		// Fetch pending join requests (only for owner)
+		let pendingRequests = [];
+		if (isOwner) {
+			try {
+				const pending = await pb.collection('fantasy_season_participants').getFullList({
+					filter: `league = "${leagueId}" && status = "pending"`,
+					expand: 'user'
+				});
+				pendingRequests = pending;
+				console.log(`📋 Found ${pendingRequests.length} pending requests`);
+			} catch (error) {
+				console.error('Error fetching pending requests:', error);
+			}
+		}
+
 		// Get fantasy tournaments from expanded data
 		const fantasyTournaments = leagueRecord.expand?.fantasy_tournaments || [];
 		
@@ -81,7 +96,7 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 		return {
 			league: leagueRecord,
 			participants: participantsWithUsers,
-			pendingRequests: [],
+			pendingRequests,
 			isOwner,
 			userStatus,
 			currentUser: pb.authStore.model,
@@ -154,7 +169,7 @@ export const actions: Actions = {
 				return fail(403, { error: 'Only league owner can approve requests' });
 			}
 
-			await leagueService.approveParticipant(participantId, userId);
+			await leagueService.approveParticipant(params.id, participantId);
 			return { success: true, action: 'approved' };
 		} catch (error) {
 			console.error('Error approving participant:', error);
@@ -200,7 +215,13 @@ export const actions: Actions = {
 
 		pb.authStore.loadFromCookie(cookieString);
 
+		console.log('🎯 JOIN ACTION TRIGGERED');
+		console.log('League ID:', params.id);
+		console.log('Auth valid:', pb.authStore.isValid);
+		console.log('User ID:', pb.authStore.model?.id);
+
 		if (!pb.authStore.isValid) {
+			console.error('❌ User not authenticated');
 			return fail(401, { error: 'You must be logged in to join a league' });
 		}
 
@@ -209,10 +230,20 @@ export const actions: Actions = {
 		try {
 			const leagueService = new FantasyLeagueService(pb);
 			await leagueService.requestToJoin(params.id, userId);
+			console.log('✅ Join request successful');
 			return { success: true, action: 'requested' };
-		} catch (error) {
-			console.error('Error requesting to join:', error);
-			return fail(500, { error: 'Failed to request to join league' });
+		} catch (error: any) {
+			console.error('❌ Error requesting to join:', error);
+			console.error('Error details:', {
+				message: error.message,
+				status: error.status,
+				response: error.response,
+				data: error.data
+			});
+			
+			// Return more specific error message
+			const errorMessage = error.data?.message || error.message || 'Failed to request to join league';
+			return fail(500, { error: errorMessage });
 		}
 	}
 };

@@ -171,27 +171,69 @@ export class FantasyLeagueService {
 	 * Request to join a league (creates pending participant)
 	 */
 	async requestToJoin(leagueId: string, userId: string): Promise<FantasySeasonParticipant> {
+		console.log('🎯 REQUEST TO JOIN');
+		console.log('League ID:', leagueId);
+		console.log('User ID:', userId);
+		
 		// Check if user already has a participant record for this league
 		const existing = await this.pb.collection('fantasy_season_participants').getFullList({
 			filter: `user = "${userId}" && league = "${leagueId}"`
 		});
 
 		if (existing.length > 0) {
+			console.log('✅ User already has a participant record');
 			return fantasySeasonParticipantSchema.parse(existing[0]);
 		}
 
 		// Create new participant record with pending status
-		const participantPayload = {
+		const participantPayload: any = {
 			user: userId,
 			league: leagueId,
 			status: 'pending',
-			is_owner: false,
+			is_owner: false as boolean,  // Explicitly cast to boolean
 			joined_at: new Date().toISOString(),
 			total_points: 0
 		};
 
-		const created = await this.pb.collection('fantasy_season_participants').create(participantPayload);
-		return fantasySeasonParticipantSchema.parse(created);
+		console.log('📝 Creating participant record in collection: fantasy_season_participants');
+		console.log('Payload:', JSON.stringify(participantPayload, null, 2));
+
+		try {
+			const created = await this.pb.collection('fantasy_season_participants').create(participantPayload);
+			console.log('✅ Participant record created:', created.id);
+			return fantasySeasonParticipantSchema.parse(created);
+		} catch (error: any) {
+			console.error('❌ Error creating participant record in fantasy_season_participants:');
+			console.error('Error type:', typeof error);
+			console.error('Error message:', error.message);
+			console.error('Error status:', error.status);
+			
+			// Log the detailed validation errors from PocketBase
+			if (error.data) {
+				console.error('Validation errors:');
+				console.error(JSON.stringify(error.data, null, 2));
+			}
+			
+			if (error.response) {
+				console.error('Response:');
+				console.error(JSON.stringify(error.response, null, 2));
+			}
+			
+			// Log the original error object
+			console.error('Original error object:', error);
+			
+			// Extract specific field errors if available
+			if (error.data?.data) {
+				console.error('\n🔍 Field-specific errors:');
+				Object.keys(error.data.data).forEach(field => {
+					console.error(`  ${field}:`, error.data.data[field]);
+				});
+			}
+			
+			// Re-throw with more context
+			const detailedMessage = error.data?.message || error.message || 'Unknown error';
+			throw new Error(`Failed to create participant record: ${detailedMessage}`);
+		}
 	}
 
 	/**
@@ -247,6 +289,21 @@ export class FantasyLeagueService {
 		console.log('═══════════════════════════════════════');
 
 		return { participant, tournamentsGenerated };
+	}
+
+	/**
+	 * Reject a participant request
+	 */
+	async rejectParticipant(participantId: string): Promise<void> {
+		console.log('❌ REJECTING PARTICIPANT');
+		console.log('Participant ID:', participantId);
+		
+		// Update participant status to rejected
+		await this.pb.collection('fantasy_season_participants').update(participantId, {
+			status: 'rejected'
+		});
+		
+		console.log('✅ Participant rejected');
 	}
 
 	/**
