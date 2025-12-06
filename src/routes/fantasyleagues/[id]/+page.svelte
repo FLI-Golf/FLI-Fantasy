@@ -9,6 +9,7 @@
 	import Crown from '@lucide/svelte/icons/crown';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import Brackets from '@lucide/svelte/icons/brackets';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -60,15 +61,16 @@
 					};
 				}}
 			>
-				<Button 
+				<button 
 					type="submit" 
-					class="px-8 py-6 text-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-emerald-600 hover:to-green-500 text-white font-bold shadow-2xl hover:shadow-3xl transition-all transform hover:scale-110 rounded-xl"
+					class="w-full md:w-auto px-12 py-8 bg-gradient-to-br from-green-500 via-emerald-600 to-green-700 hover:from-emerald-600 hover:via-green-600 hover:to-emerald-700 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 border-2 border-green-400"
 				>
-					<span class="flex items-center gap-3">
-						Request to Join League
-						<ArrowRight class="h-7 w-7 animate-pulse" />
-					</span>
-				</Button>
+					<div class="flex flex-col items-center gap-3">
+						<Brackets class="h-12 w-12 animate-pulse" />
+						<span class="text-2xl font-bold">Request to Join League</span>
+						<span class="text-sm opacity-90">Click to send your join request</span>
+					</div>
+				</button>
 			</form>
 		{:else if data.userStatus?.status === 'pending'}
 			<div class="px-6 py-3 bg-yellow-50 border-2 border-yellow-400 rounded-lg shadow-lg">
