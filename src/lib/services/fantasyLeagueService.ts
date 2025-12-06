@@ -556,13 +556,34 @@ export class FantasyLeagueService {
 				// Randomize draft order for this tournament
 				const draftOrder = this.shuffleArray(approvedUserIds);
 
-				// Get golfers for this tournament
+				// Get golfers from teams where reserves = false
 				let golfers = [];
 				try {
-					golfers = await this.pb.collection('golfers').getFullList({
-						filter: `tournament = "${tournament.id}"`
+					// First get all teams for this tournament where reserves = false
+					const teams = await this.pb.collection('teams').getFullList({
+						filter: `reserves = false`,
+						expand: 'male_golfer,female_golfer'
 					});
-					console.log(`📊 Found ${golfers.length} golfers for tournament`);
+					
+					// Extract golfer IDs from teams (both male and female)
+					const golferIds: string[] = [];
+					teams.forEach(team => {
+						if (team.male_golfer) golferIds.push(team.male_golfer);
+						if (team.female_golfer) golferIds.push(team.female_golfer);
+					});
+					
+					// Remove duplicates
+					const uniqueGolferIds = [...new Set(golferIds)];
+					
+					// Fetch all golfers by ID
+					if (uniqueGolferIds.length > 0) {
+						const golferFilter = uniqueGolferIds.map(id => `id = "${id}"`).join(' || ');
+						golfers = await this.pb.collection('golfers').getFullList({
+							filter: golferFilter
+						});
+					}
+					
+					console.log(`📊 Found ${golfers.length} golfers from non-reserve teams`);
 				} catch (error) {
 					console.error('Error fetching golfers:', error);
 				}
@@ -598,7 +619,7 @@ export class FantasyLeagueService {
 
 				// Create fantasy settings for draft
 				const fantasySettings = {
-					start_pause_interval: settings?.start_pause_interval || 60,
+					start_pause: false, // true = paused, false = running
 					pick_duration_seconds: 60, // 60 seconds per pick
 					rounds: settings?.rounds || 5,
 					auto_draft_enabled: true
