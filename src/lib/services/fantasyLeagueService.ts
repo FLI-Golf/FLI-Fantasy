@@ -371,19 +371,21 @@ export class FantasyLeagueService {
 		leagueId: string,
 		userId: string
 	): Promise<FantasySeasonParticipant | null> {
-		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
-		
-		// Check if user is the owner
-		if (league.league_owner === userId) {
-			if (league.fantasy_participants) {
-				const participant = await this.pb
-					.collection('fantasy_season_participants')
-					.getOne(league.fantasy_participants);
-				return fantasySeasonParticipantSchema.parse(participant);
-			}
-		}
+		try {
+			// Check if user has a participant record for this league
+			const participants = await this.pb.collection('fantasy_season_participants').getFullList({
+				filter: `league = "${leagueId}" && user = "${userId}"`
+			});
 
-		return null;
+			if (participants.length > 0) {
+				return fantasySeasonParticipantSchema.parse(participants[0]);
+			}
+
+			return null;
+		} catch (error) {
+			console.error('Error getting user participation status:', error);
+			return null;
+		}
 	}
 
 	/**
