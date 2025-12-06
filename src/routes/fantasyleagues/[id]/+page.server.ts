@@ -162,18 +162,30 @@ export const actions: Actions = {
 		const participantId = formData.get('participantId') as string;
 
 		try {
+			console.log('🎯 APPROVE ACTION');
+			console.log('League ID:', params.id);
+			console.log('Participant ID:', participantId);
+			console.log('User ID:', userId);
+
 			const leagueService = new FantasyLeagueService(pb);
 			const isOwner = await leagueService.isLeagueOwner(params.id, userId);
 
+			console.log('Is owner?', isOwner);
+
 			if (!isOwner) {
+				console.error('❌ User is not the owner');
 				return fail(403, { error: 'Only league owner can approve requests' });
 			}
 
+			console.log('✅ Calling approveParticipant...');
 			await leagueService.approveParticipant(params.id, participantId);
+			console.log('✅ Participant approved successfully');
 			return { success: true, action: 'approved' };
-		} catch (error) {
-			console.error('Error approving participant:', error);
-			return fail(500, { error: 'Failed to approve participant' });
+		} catch (error: any) {
+			console.error('❌ Error approving participant:', error);
+			console.error('Error message:', error.message);
+			console.error('Error stack:', error.stack);
+			return fail(500, { error: `Failed to approve participant: ${error.message}` });
 		}
 	},
 
