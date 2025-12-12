@@ -68,7 +68,8 @@ export const fantasyTournamentSchema = z.object({
 	fantasy_league: z.string(),
 	draft_results: z.any().optional(),
 	tournament: z.string().optional(), // Reference to actual tournament
-	name: z.string().optional() // Name from the tournament
+	name: z.string().optional(), // Name from the tournament
+	title: z.string().optional() // Formatted title with date and tournament name
 });
 
 export type FantasyTournament = z.infer<typeof fantasyTournamentSchema>;
