@@ -153,8 +153,8 @@ export class FantasyLeagueService {
 		draftManagement.current_drafter = nextDrafter;
 		draftManagement.draft_direction = direction;
 		
-		// Check if draft is completed (4 rounds * number of participants)
-		const totalPicks = tournament.draft_order.length * 4;
+		// Check if draft is completed (rounds * number of participants)
+		const totalPicks = tournament.draft_order.length * tournament.fantasy_settings.rounds;
 		if (draftManagement.current_pick >= totalPicks) {
 			draftManagement.draft_completed = true;
 		}
@@ -687,12 +687,15 @@ export class FantasyLeagueService {
 				};
 
 				// Create fantasy settings for draft
-				// Pick duration options: 10, 15, or 30 seconds
+				const rounds = 4;
 				const fantasySettings = {
 					start_pause: false, // true = paused, false = running
-					pick_duration_seconds: 30, // Options: 10, 15, or 30 seconds per pick
-					rounds: 4, // 4 rounds total
-					auto_draft_enabled: true
+					pick_duration_seconds: 30, // Options: 15, 30, 45 seconds per pick
+					pick_duration_options: [15, 30, 45], // Available timer options
+					rounds: rounds, // Total number of rounds
+					rounds_array: Array.from({ length: rounds }, (_, i) => i + 1), // [1, 2, 3, 4] for UI iteration
+					auto_draft_enabled: true,
+					auto_draft_delay_seconds: 10 // Time before auto-pick kicks in
 				};
 
 				const payload: any = {
@@ -709,10 +712,26 @@ export class FantasyLeagueService {
 					console.log('🔗 Adding tournament reference:', tournament.id);
 				}
 
-				// Add tournament name if field exists
+				// Set tournament name (plain)
 				if (tournament.name) {
 					payload.name = tournament.name;
 					console.log('📝 Adding tournament name:', tournament.name);
+				}
+
+				// Create descriptive title with date and tournament name
+				if (tournament.name && tournament.start_date) {
+					// Format date as "MMM DD, YYYY" (e.g., "Jan 15, 2026")
+					const startDate = new Date(tournament.start_date);
+					const formattedDate = startDate.toLocaleDateString('en-US', { 
+						month: 'short', 
+						day: 'numeric', 
+						year: 'numeric' 
+					});
+					payload.title = `${formattedDate} - ${tournament.name}`;
+					console.log('📝 Adding tournament title:', payload.title);
+				} else if (tournament.name) {
+					payload.title = tournament.name;
+					console.log('📝 Adding tournament title (fallback):', payload.title);
 				}
 
 				console.log('═══════════════════════════════════════');
