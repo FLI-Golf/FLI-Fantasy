@@ -37,33 +37,24 @@
 			console.log('🌐 Location:', window.location.href);
 		}
 		
-		// Wait a moment for auth to load from cookie
-		console.log('⏳ Waiting 100ms for auth to load...');
-		await new Promise(resolve => setTimeout(resolve, 100));
+		// Check if user is logged in via pb.authStore (more reliable than store)
+		console.log('🔐 Auth store valid:', pb.authStore.isValid);
+		console.log('👤 Auth store model:', pb.authStore.model?.email);
 		
-		console.log('📊 Current user after wait:', $currentUser);
-		console.log('🔐 Auth store valid after wait:', pb.authStore.isValid);
-		
-		// Check if user is logged in
-		if (!$currentUser) {
-			console.log('❌ No current user, redirecting to home');
-			goto('/');
-			return;
-		}
-		
-		if (!pb.authStore.isValid) {
-			console.log('❌ Auth store invalid, redirecting to home');
+		if (!pb.authStore.isValid || !pb.authStore.model) {
+			console.log('❌ Not authenticated, redirecting to home');
 			goto('/');
 			return;
 		}
 
-		console.log('✅ User is logged in:', $currentUser.email);
-		console.log('🆔 User ID:', $currentUser.id);
+		const userId = pb.authStore.model.id;
+		console.log('✅ User is logged in:', pb.authStore.model.email);
+		console.log('🆔 User ID:', userId);
 
 		// Fetch user profile to get the role field
 		try {
 			console.log('📡 Fetching user profile...');
-			const profile = await pb.collection('user_profile').getFirstListItem(`user="${$currentUser.id}"`);
+			const profile = await pb.collection('user_profile').getFirstListItem(`user="${userId}"`);
 			console.log('✅ User profile received:', {
 				id: profile.id,
 				display_name: profile.display_name,
@@ -89,15 +80,15 @@
 		// Load dashboard stats
 		try {
 			console.log('📊 Loading dashboard stats...');
-			const [users, seasons, tournaments, golfers] = await Promise.all([
+			const [users, leagues, tournaments, golfers] = await Promise.all([
 				pb.collection('users').getList(1, 1),
-				pb.collection('fantasy_seasons').getList(1, 1),
+				pb.collection('fantasy_league').getList(1, 1),
 				pb.collection('tournaments').getList(1, 1),
 				pb.collection('golfers').getList(1, 1, { filter: 'is_active = true' })
 			]);
 
 			stats.totalUsers = users.totalItems;
-			stats.totalSeasons = seasons.totalItems;
+			stats.totalSeasons = leagues.totalItems;
 			stats.totalTournaments = tournaments.totalItems;
 			stats.activeGolfers = golfers.totalItems;
 			

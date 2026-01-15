@@ -39,12 +39,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 					.collection('user_profile')
 					.getFirstListItem(`user="${pb.authStore.model?.id}"`);
 
-				if (!requiredRoles.includes(profile.role as string)) {
+				const userRole = profile.role as string;
+				if (!requiredRoles.includes(userRole)) {
+					console.log(`Access denied: user role '${userRole}' not in required roles [${requiredRoles.join(', ')}]`);
 					throw redirect(303, '/');
 				}
 			} catch (err) {
+				// Re-throw redirects
 				if ((err as { status?: number }).status === 303) throw err;
-				throw redirect(303, '/');
+				
+				// Log the actual error
+				console.error('Error checking user role:', err);
+				
+				// Don't redirect on profile fetch errors - let the page handle it
+				// This allows the page to show appropriate error messages
 			}
 		}
 	}

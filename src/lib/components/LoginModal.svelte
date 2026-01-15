@@ -41,29 +41,31 @@
 			}
 			
 			// Redirect users based on role
+			let redirectPath = '/';
 			if (userRole === 'admin') {
 				console.log('🔄 Redirecting to admin dashboard...');
-				window.location.href = '/admin';
-				return;
+				redirectPath = '/admin';
 			} else if (userRole === 'league_admin') {
 				console.log('🔄 Redirecting to league admin dashboard...');
-				window.location.href = '/admin';
-				return;
+				redirectPath = '/admin';
 			} else if (userRole === 'scorekeeper') {
 				console.log('🔄 Redirecting to scorekeeper dashboard...');
-				window.location.href = '/scorekeeper';
-				return;
+				redirectPath = '/scorekeeper';
 			} else if (userRole === 'league_member' || userRole === 'free') {
 				console.log('🔄 Redirecting to player dashboard...');
-				window.location.href = '/player';
-				return;
+				redirectPath = '/player';
 			} else {
-				console.log('⚠️ No matching role, closing modal. Role was:', userRole);
+				console.log('⚠️ No matching role, staying on current page. Role was:', userRole);
 			}
 			
 			open = false;
 			email = '';
 			password = '';
+			
+			// Use goto for SvelteKit navigation
+			if (redirectPath !== '/') {
+				await goto(redirectPath);
+			}
 		} catch (err: any) {
 			console.error('❌ Login failed:', err);
 			// Provide more helpful error message
