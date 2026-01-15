@@ -7,6 +7,10 @@ export const fantasyLeagueCreateSchema = z.object({
 
 export type FantasyLeagueCreateInput = z.infer<typeof fantasyLeagueCreateSchema>;
 
+// Aliases for backward compatibility with fantasySeasonService
+export const fantasySeasonCreateSchema = fantasyLeagueCreateSchema;
+export type FantasySeasonCreateInput = FantasyLeagueCreateInput;
+
 // Schema for a fantasy league record from PocketBase
 export const fantasyLeagueRecordSchema = z.object({
 	id: z.string(),
@@ -25,6 +29,10 @@ export const fantasyLeagueRecordSchema = z.object({
 
 export type FantasyLeague = z.infer<typeof fantasyLeagueRecordSchema>;
 
+// Aliases for backward compatibility with fantasySeasonService
+export const fantasySeasonRecordSchema = fantasyLeagueRecordSchema;
+export type FantasySeason = FantasyLeague;
+
 // Schema for fantasy season participant
 export const fantasySeasonParticipantSchema = z.object({
 	id: z.string(),
@@ -42,6 +50,9 @@ export const fantasySeasonParticipantSchema = z.object({
 });
 
 export type FantasySeasonParticipant = z.infer<typeof fantasySeasonParticipantSchema>;
+
+// Alias for backward compatibility
+export const fantasySeasonParticipantRecordSchema = fantasySeasonParticipantSchema;
 
 // Schema for tournament record
 export const tournamentSchema = z.object({
