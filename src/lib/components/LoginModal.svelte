@@ -25,37 +25,37 @@
 			console.log('🔐 Attempting login...');
 			const authData = await pb.collection('users').authWithPassword(email, password);
 			console.log('✅ Login successful:', authData.record.email);
-			console.log('👤 User role:', authData.record.role);
 			
 			// Save to cookie explicitly
 			document.cookie = pb.authStore.exportToCookie({ httpOnly: false });
 			console.log('🍪 Auth cookie saved');
 			
-			// Redirect users based on role
-			console.log('🔍 Checking role for redirect:', authData.record.role, typeof authData.record.role);
-			console.log('🔍 Full user record:', authData.record);
-			
-			const userRole = authData.record.role;
-			
-			if (!userRole) {
-				console.log('⚠️ No role found on user record');
+			// Fetch user profile to get role
+			let userRole: string | null = null;
+			try {
+				const profile = await pb.collection('user_profile').getFirstListItem(`user="${authData.record.id}"`);
+				userRole = profile.role as string;
+				console.log('👤 User role from profile:', userRole);
+			} catch (err) {
+				console.warn('⚠️ Could not fetch user profile:', err);
 			}
 			
+			// Redirect users based on role
 			if (userRole === 'admin') {
 				console.log('🔄 Redirecting to admin dashboard...');
+				window.location.href = '/admin';
+				return;
+			} else if (userRole === 'league_admin') {
+				console.log('🔄 Redirecting to league admin dashboard...');
 				window.location.href = '/admin';
 				return;
 			} else if (userRole === 'scorekeeper') {
 				console.log('🔄 Redirecting to scorekeeper dashboard...');
 				window.location.href = '/scorekeeper';
 				return;
-			} else if (userRole === 'player') {
+			} else if (userRole === 'league_member' || userRole === 'free') {
 				console.log('🔄 Redirecting to player dashboard...');
 				window.location.href = '/player';
-				return;
-			} else if (userRole === 'participant') {
-				console.log('⚠️ Deprecated role "participant" - redirecting to dashboard...');
-				window.location.href = '/dashboard';
 				return;
 			} else {
 				console.log('⚠️ No matching role, closing modal. Role was:', userRole);

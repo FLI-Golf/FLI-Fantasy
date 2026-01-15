@@ -60,29 +60,28 @@
 		console.log('✅ User is logged in:', $currentUser.email);
 		console.log('🆔 User ID:', $currentUser.id);
 
-		// Fetch fresh user data to get the role field
+		// Fetch user profile to get the role field
 		try {
-			console.log('📡 Fetching fresh user data...');
-			const freshUser = await pb.collection('users').getOne($currentUser.id);
-			console.log('✅ Fresh user data received:', {
-				id: freshUser.id,
-				name: freshUser.name,
-				email: freshUser.email,
-				role: freshUser.role
+			console.log('📡 Fetching user profile...');
+			const profile = await pb.collection('user_profile').getFirstListItem(`user="${$currentUser.id}"`);
+			console.log('✅ User profile received:', {
+				id: profile.id,
+				display_name: profile.display_name,
+				role: profile.role
 			});
 			
-			if (freshUser.role !== 'admin') {
-				console.log('❌ User is not admin, role:', freshUser.role);
+			if (profile.role !== 'admin' && profile.role !== 'league_admin') {
+				console.log('❌ User is not admin or league_admin, role:', profile.role);
 				console.log('🔄 Redirecting to home...');
 				goto('/');
 				return;
 			}
 
-			console.log('✅ User is admin:', freshUser.name);
+			console.log('✅ User has admin access:', profile.display_name, 'role:', profile.role);
 			console.log('🎉 Proceeding to load dashboard...');
 			checkingAuth = false;
 		} catch (err) {
-			console.error('❌ Error fetching user:', err);
+			console.error('❌ Error fetching user profile:', err);
 			goto('/');
 			return;
 		}

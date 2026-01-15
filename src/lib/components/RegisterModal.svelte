@@ -47,7 +47,8 @@
 			// Create user profile with default role
 			await pb.collection('user_profile').create({
 				user: user.id,
-				role: 'player'
+				display_name: name,
+				role: 'free'
 			});
 
 			// Auto-login after registration

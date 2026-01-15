@@ -2,6 +2,9 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { currentUser, pb } from '$lib/pocketbase';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import RegisterModal from '$lib/components/RegisterModal.svelte';
 	import LiveScoreTicker from '$lib/components/LiveScoreTicker.svelte';
@@ -24,6 +27,15 @@
 	let showLogin = $state(false);
 	let showRegister = $state(false);
 	let mobileMenuOpen = $state(false);
+
+	// Check for showRegister query param
+	$effect(() => {
+		if (browser && $page.url.searchParams.get('showRegister') === 'true') {
+			showRegister = true;
+			// Clean up URL
+			goto('/', { replaceState: true });
+		}
+	});
 
 	function logout() {
 		pb.authStore.clear();
@@ -64,23 +76,25 @@
 			<!-- Hamburger Navigation Menu -->
 			{#if mobileMenuOpen}
 				<nav class="mt-4 pt-4 border-t border-gray-800 flex flex-col gap-3">
-					<a 
-						href="/shop" 
-						class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
-						onclick={() => (mobileMenuOpen = false)}
-					>
-						<ShoppingBag class="h-4 w-4" />
-						Shop
-					</a>
-					<a 
-						href="/seasons" 
-						class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
-						onclick={() => (mobileMenuOpen = false)}
-					>
-						<Trophy class="h-4 w-4" />
-						Fantasy
-					</a>
-					{#if $currentUser?.role === 'player'}
+					{#if $currentUser}
+						<a 
+							href="/shop" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<ShoppingBag class="h-4 w-4" />
+							Shop
+						</a>
+						<a 
+							href="/seasons" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<Trophy class="h-4 w-4" />
+							Fantasy
+						</a>
+					{/if}
+					{#if $currentUser?.role === 'league_member' || $currentUser?.role === 'free'}
 						<a 
 							href="/player" 
 							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
@@ -98,6 +112,16 @@
 						>
 							<Users class="h-4 w-4" />
 							Admin
+						</a>
+					{/if}
+					{#if $currentUser?.role === 'league_admin'}
+						<a 
+							href="/admin" 
+							class="text-white hover:text-gray-200 font-semibold transition-colors py-2 flex items-center gap-2"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							<Users class="h-4 w-4" />
+							League Admin
 						</a>
 					{/if}
 					{#if $currentUser?.role === 'scorekeeper'}
