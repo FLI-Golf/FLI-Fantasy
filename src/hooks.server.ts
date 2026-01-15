@@ -1,6 +1,6 @@
 import { redirect, type Handle } from '@sveltejs/kit';
 import PocketBase from 'pocketbase';
-import { VITE_POCKETBASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 // Routes that require authentication - redirect to home with showRegister flag
 const authRequiredRoutes = ['/shop', '/seasons', '/player', '/dashboard'];
@@ -12,7 +12,7 @@ const roleProtectedRoutes: Record<string, string[]> = {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const pb = new PocketBase(VITE_POCKETBASE_URL);
+	const pb = new PocketBase(env.VITE_POCKETBASE_URL || 'https://pocketbase-production-e678.up.railway.app');
 
 	// Load auth from cookie
 	pb.authStore.loadFromCookie(event.request.headers.get('cookie') || '');

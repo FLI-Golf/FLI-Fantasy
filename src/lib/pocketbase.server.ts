@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
-import { VITE_POCKETBASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 export function createServerPocketBase() {
-	const url = VITE_POCKETBASE_URL || 'https://pocketbase-production-e678.up.railway.app';
+	const url = env.VITE_POCKETBASE_URL || 'https://pocketbase-production-e678.up.railway.app';
 	return new PocketBase(url);
 }
