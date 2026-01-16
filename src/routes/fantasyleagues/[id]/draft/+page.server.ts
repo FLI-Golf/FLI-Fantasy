@@ -26,16 +26,21 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 		throw redirect(302, '/');
 	}
 
-	const leagueId = params.id;
+	// The [id] param is the fantasy_tournament ID
+	const tournamentId = params.id;
 	const userId = pb.authStore.model?.id;
 
 	try {
-		const leagueService = new FantasyLeagueService(pb);
-
-		// Get league data
-		const league = await pb.collection('fantasy_league').getOne(leagueId, {
-			expand: 'league_owner,fantasy_tournaments'
+		// Get the fantasy tournament directly
+		const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId, {
+			expand: 'fantasy_league'
 		});
+
+		// Get the league from the tournament's relation
+		const leagueId = tournament.fantasy_league;
+		const league = tournament.expand?.fantasy_league || await pb.collection('fantasy_league').getOne(leagueId);
+
+		const leagueService = new FantasyLeagueService(pb);
 
 		// Check if user is owner or participant
 		const isOwner = league.league_owner === userId;
@@ -47,25 +52,9 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			throw redirect(302, `/fantasyleagues/${leagueId}`);
 		}
 
-		// Get fantasy tournament (first one for now)
-		const fantasyTournaments = league.expand?.fantasy_tournaments || [];
-		const currentTournament = fantasyTournaments[0];
-
-		if (!currentTournament) {
-			return {
-				league,
-				isOwner,
-				currentUser: pb.authStore.model,
-				participants: approvedParticipants,
-				draftManagement: null,
-				golfers: [],
-				error: 'No tournament available for draft'
-			};
-		}
-
-		// Get or initialize draft management
+		// Get draft management from tournament
 		// Note: DB field has typo 'draft_managment' (missing 'e')
-		let draftManagement: DraftManagement | null = currentTournament.draft_managment || null;
+		let draftManagement: DraftManagement | null = tournament.draft_managment || null;
 
 		// Get golfers for the draft
 		let golfers: DraftGolfer[] = [];
@@ -125,13 +114,16 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 
 		return {
 			league,
+			leagueId,
 			isOwner,
 			currentUser: pb.authStore.model,
 			participants: participantsWithUsers,
 			draftManagement,
+			draftOrder: tournament.draft_order || [],
+			fantasySettings: tournament.fantasy_settings || {},
 			golfers,
-			tournamentId: currentTournament.id,
-			tournamentName: currentTournament.name || currentTournament.title
+			tournamentId: tournament.id,
+			tournamentName: tournament.title
 		};
 	} catch (error) {
 		console.error('Error loading draft page:', error);
@@ -149,9 +141,6 @@ export const actions: Actions = {
 		const cookieString = allCookies.map((c) => `${c.name}=${c.value}`).join('; ');
 		pb.authStore.loadFromCookie(cookieString);
 
-		console.log('Auth valid:', pb.authStore.isValid);
-		console.log('User ID:', pb.authStore.model?.id);
-
 		if (!pb.authStore.isValid) {
 			console.log('❌ Unauthorized');
 			return fail(401, { error: 'Unauthorized' });
@@ -160,17 +149,15 @@ export const actions: Actions = {
 		const userId = pb.authStore.model?.id;
 		const formData = await request.formData();
 		const timerDuration = parseInt(formData.get('timerDuration') as string) || 7;
-		const tournamentId = formData.get('tournamentId') as string;
-
-		console.log('Timer duration:', timerDuration);
-		console.log('Tournament ID:', tournamentId);
-		console.log('League ID:', params.id);
+		
+		// params.id is the tournament ID
+		const tournamentId = params.id;
 
 		try {
-			// Verify owner
-			console.log('📋 Fetching league...');
-			const league = await pb.collection('fantasy_league').getOne(params.id);
-			console.log('League owner:', league.league_owner);
+			// Get tournament and its league
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const leagueId = tournament.fantasy_league;
+			const league = await pb.collection('fantasy_league').getOne(leagueId);
 			
 			if (league.league_owner !== userId) {
 				console.log('❌ Not owner');
@@ -178,9 +165,8 @@ export const actions: Actions = {
 			}
 
 			// Get approved participants
-			console.log('📋 Fetching participants...');
 			const participants = await pb.collection('fantasy_season_participants').getFullList({
-				filter: `league = "${params.id}" && status = "approved"`
+				filter: `league = "${leagueId}" && status = "approved"`
 			});
 			console.log('Approved participants:', participants.length);
 
@@ -190,13 +176,11 @@ export const actions: Actions = {
 			}
 
 			// Get golfers from non-reserve teams
-			console.log('📋 Fetching teams...');
 			const teams = await pb.collection('teams').getFullList({
 				filter: 'reserves = false'
 			});
-			console.log('Non-reserve teams:', teams.length);
 
-			// Collect golfer IDs from teams (male_golfer and female_golfer fields)
+			// Collect golfer IDs from teams
 			const golferIds: string[] = [];
 			const golferTeamMap: Record<string, string> = {};
 			
@@ -210,19 +194,16 @@ export const actions: Actions = {
 					golferTeamMap[team.female_golfer] = team.name;
 				}
 			});
-			console.log('Golfer IDs collected:', golferIds.length);
 
 			if (golferIds.length !== 24) {
 				console.log('❌ Wrong golfer count');
 				return fail(400, { error: `Need exactly 24 golfers, have ${golferIds.length}` });
 			}
 
-			console.log('📋 Fetching golfers...');
 			const golfersData = await pb.collection('golfers').getFullList({
 				filter: golferIds.map((id) => `id = "${id}"`).join(' || '),
 				sort: 'world_ranking'
 			});
-			console.log('Golfers fetched:', golfersData.length);
 
 			const golfers: DraftGolfer[] = golfersData.map((g) => ({
 				id: g.id,
@@ -238,20 +219,15 @@ export const actions: Actions = {
 			// Shuffle participant order for draft
 			const participantIds = participants.map((p) => p.user);
 			const shuffledOrder = [...participantIds].sort(() => Math.random() - 0.5);
-			console.log('Shuffled order:', shuffledOrder);
 
 			// Create draft management
-			console.log('📋 Creating draft management...');
 			const draftManagement = createDraftManagement(
 				shuffledOrder,
 				golfers,
 				timerDuration as 7 | 15 | 30 | 45
 			);
-			console.log('Draft management created');
 
 			// Save to fantasy tournament
-			// Note: DB field has typo 'draft_managment' (missing 'e')
-			console.log('📋 Saving to fantasy tournament:', tournamentId);
 			await pb.collection('fantasy_tournament').update(tournamentId, {
 				draft_managment: draftManagement,
 				draft_order: shuffledOrder
@@ -261,8 +237,6 @@ export const actions: Actions = {
 			return { success: true, action: 'draft_initialized' };
 		} catch (error: any) {
 			console.error('❌ Error initializing draft:', error);
-			console.error('Error message:', error.message);
-			console.error('Error data:', error.data);
 			return fail(500, { error: error.message || 'Failed to initialize draft' });
 		}
 	},
@@ -279,29 +253,70 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
-			const league = await pb.collection('fantasy_league').getOne(params.id);
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
 			if (league.league_owner !== userId) {
 				return fail(403, { error: 'Only league owner can start draft' });
 			}
 
-			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			if (!tournament.draft_managment) {
 				return fail(400, { error: 'Draft not initialized' });
 			}
 
-			const updatedDraft = startDraft(tournament.draft_managment);
+			let draftData = tournament.draft_managment as any;
+			
+			// Normalize old format to new format if needed
+			if (!draftData.status) {
+				// Old format has draft_started/draft_completed, convert to status
+				if (draftData.draft_completed) {
+					draftData.status = 'completed';
+				} else if (draftData.draft_started) {
+					draftData.status = 'in_progress';
+				} else {
+					draftData.status = 'pending';
+				}
+			}
+			
+			// Ensure all required fields exist
+			draftData.draft_order = draftData.draft_order || tournament.draft_order || [];
+			draftData.timer_duration = draftData.timer_duration || tournament.fantasy_settings?.pick_duration_seconds || 30;
+			draftData.total_rounds = draftData.total_rounds || tournament.fantasy_settings?.rounds || 4;
+			draftData.current_round = draftData.current_round || 1;
+			draftData.pick_history = draftData.pick_history || [];
+			draftData.team_compositions = draftData.team_compositions || {};
+			
+			// Initialize team_compositions for each participant if not exists
+			for (const oderId of draftData.draft_order) {
+				if (!draftData.team_compositions[oderId]) {
+					draftData.team_compositions[oderId] = {
+						oderId,
+						fantasy_team: [],
+						male_count: 0,
+						female_count: 0,
+						total_picks: 0
+					};
+				}
+			}
+
+			const updatedDraft = startDraft(draftData as DraftManagement);
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
 			}
+
+			// Ensure timer_started_at is set
+			const now = new Date().toISOString();
+			updatedDraft.timer_started_at = now;
+			updatedDraft.started_at = now;
 
 			await pb.collection('fantasy_tournament').update(tournamentId, {
 				draft_managment: updatedDraft
 			});
 
+			console.log('Draft started with timer_started_at:', updatedDraft.timer_started_at);
 			return { success: true, action: 'draft_started' };
 		} catch (error: any) {
 			console.error('Error starting draft:', error);
@@ -321,18 +336,17 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
-			const league = await pb.collection('fantasy_league').getOne(params.id);
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
 			if (league.league_owner !== userId) {
 				return fail(403, { error: 'Only league owner can pause draft' });
 			}
 
-			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			const updatedDraft = pauseDraft(tournament.draft_managment);
-
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
 			}
@@ -360,18 +374,17 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
-			const league = await pb.collection('fantasy_league').getOne(params.id);
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
 			if (league.league_owner !== userId) {
 				return fail(403, { error: 'Only league owner can resume draft' });
 			}
 
-			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			const updatedDraft = resumeDraft(tournament.draft_managment);
-
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
 			}
@@ -399,16 +412,16 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
-			const league = await pb.collection('fantasy_league').getOne(params.id);
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
 			if (league.league_owner !== userId) {
 				return fail(403, { error: 'Only league owner can reset draft' });
 			}
 
-			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			const updatedDraft = resetDraft(tournament.draft_managment);
 
 			await pb.collection('fantasy_tournament').update(tournamentId, {
@@ -434,18 +447,17 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
-			const league = await pb.collection('fantasy_league').getOne(params.id);
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
 			if (league.league_owner !== userId) {
 				return fail(403, { error: 'Only league owner can undo picks' });
 			}
 
-			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			const updatedDraft = undoLastPick(tournament.draft_managment);
-
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
 			}
@@ -474,8 +486,8 @@ export const actions: Actions = {
 
 		const userId = pb.authStore.model?.id;
 		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
 		const golferId = formData.get('golferId') as string;
+		const tournamentId = params.id;
 
 		try {
 			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
@@ -496,8 +508,20 @@ export const actions: Actions = {
 				return fail(400, { error: updatedDraft.last_error });
 			}
 
+			// Build draft_results from team_compositions
+			const draftResults: Record<string, any> = {};
+			for (const [oderId, teamComp] of Object.entries(updatedDraft.team_compositions)) {
+				draftResults[oderId] = {
+					fantasy_team: teamComp.fantasy_team,
+					male_count: teamComp.male_count,
+					female_count: teamComp.female_count,
+					total_picks: teamComp.total_picks
+				};
+			}
+
 			await pb.collection('fantasy_tournament').update(tournamentId, {
-				draft_managment: updatedDraft
+				draft_managment: updatedDraft,
+				draft_results: draftResults
 			});
 
 			return { success: true, action: 'pick_made' };
@@ -518,8 +542,7 @@ export const actions: Actions = {
 			return fail(401, { error: 'Unauthorized' });
 		}
 
-		const formData = await request.formData();
-		const tournamentId = formData.get('tournamentId') as string;
+		const tournamentId = params.id;
 
 		try {
 			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
@@ -540,8 +563,20 @@ export const actions: Actions = {
 				return fail(400, { error: updatedDraft.last_error });
 			}
 
+			// Build draft_results from team_compositions
+			const draftResults: Record<string, any> = {};
+			for (const [oderId, teamComp] of Object.entries(updatedDraft.team_compositions)) {
+				draftResults[oderId] = {
+					fantasy_team: teamComp.fantasy_team,
+					male_count: teamComp.male_count,
+					female_count: teamComp.female_count,
+					total_picks: teamComp.total_picks
+				};
+			}
+
 			await pb.collection('fantasy_tournament').update(tournamentId, {
-				draft_managment: updatedDraft
+				draft_managment: updatedDraft,
+				draft_results: draftResults
 			});
 
 			return { success: true, action: 'auto_pick_made', golferId: autoPick.id };

@@ -16,6 +16,22 @@
 	$: currentUserId = data.currentUser?.id;
 	$: isMyTurn = draft?.current_drafter === currentUserId;
 	$: participants = data.participants || [];
+	
+	// Derive status from draft data (handles both old and new format)
+	$: draftStatus = (() => {
+		if (!draft) return 'not_initialized';
+		// New format with status field
+		if (draft.status) return draft.status;
+		// Old format with draft_started/draft_completed
+		const d = draft as any;
+		if (d.draft_completed) return 'completed';
+		if (d.draft_started) return 'in_progress';
+		return 'pending';
+	})();
+	
+	// Get rounds from fantasy_settings or draft
+	$: totalRounds = (data as any).fantasySettings?.rounds || draft?.total_rounds || 4;
+	$: totalPicks = totalRounds * 6; // 6 participants
 
 	// Timer state
 	let timerRemaining = 0;
@@ -57,10 +73,44 @@
 	// Recommended pick (best ranked from filtered)
 	$: recommendedPick = filteredGolfers[0] || null;
 
+	// Get timer duration from fantasy_settings or draft
+	$: timerDurationMs = ((data.fantasySettings?.pick_duration_seconds || draft?.timer_duration || 30) * 1000);
+	
+	// Track when current pick started (for local timer)
+	let pickStartTime: number | null = null;
+	let lastDrafter: string | null = null;
+	
+	// Initialize timer when draft becomes in_progress or drafter changes
+	$: if (draft && draftStatus === 'in_progress') {
+		if (draft.timer_started_at) {
+			// Use server time
+			const serverStart = new Date(draft.timer_started_at).getTime();
+			const elapsed = Date.now() - serverStart;
+			timerRemaining = Math.max(0, timerDurationMs - elapsed);
+		} else if (draft.current_drafter !== lastDrafter) {
+			// New drafter, start local timer
+			pickStartTime = Date.now();
+			lastDrafter = draft.current_drafter;
+			timerRemaining = timerDurationMs;
+		}
+	}
+	
 	// Update timer
 	function updateTimer() {
-		if (draft && draft.status === 'in_progress') {
-			timerRemaining = getTimerRemaining(draft);
+		if (draft && draftStatus === 'in_progress') {
+			// If drafter changed, reset the pick start time
+			if (draft.current_drafter !== lastDrafter) {
+				pickStartTime = Date.now();
+				lastDrafter = draft.current_drafter;
+			}
+			
+			// Try to use draft's timer if available, otherwise use local timer
+			if (draft.timer_started_at) {
+				timerRemaining = getTimerRemaining(draft);
+			} else if (pickStartTime) {
+				const elapsed = Date.now() - pickStartTime;
+				timerRemaining = Math.max(0, timerDurationMs - elapsed);
+			}
 
 			// Auto-pick if timer expired and it's someone's turn
 			if (timerRemaining <= 0 && draft.current_drafter) {
@@ -68,20 +118,16 @@
 			}
 		} else {
 			timerRemaining = 0;
+			pickStartTime = null;
 		}
 	}
 
 	// Trigger auto-pick
 	async function triggerAutoPick() {
-		if (!data.tournamentId) return;
-
-		const formData = new FormData();
-		formData.append('tournamentId', data.tournamentId);
-
 		try {
 			const response = await fetch('?/autoPick', {
 				method: 'POST',
-				body: formData
+				body: new FormData()
 			});
 
 			if (response.ok) {
@@ -100,6 +146,12 @@
 
 	// Start timer interval
 	onMount(() => {
+		// Initialize pickStartTime if draft is in progress and we don't have timer_started_at
+		if (draft && draftStatus === 'in_progress' && !draft.timer_started_at) {
+			pickStartTime = Date.now();
+			lastDrafter = draft.current_drafter;
+		}
+		
 		timerInterval = setInterval(updateTimer, 100);
 		updateTimer();
 	});
@@ -115,7 +167,7 @@
 
 	onMount(() => {
 		refreshInterval = setInterval(() => {
-			if (draft?.status === 'in_progress') {
+			if (draftStatus === 'in_progress') {
 				invalidateAll();
 			}
 		}, 2000);
@@ -164,16 +216,7 @@
 			</Card.Header>
 			<Card.Content>
 				{#if isOwner}
-					<form method="POST" action="?/initDraft" use:enhance={() => {
-						console.log('🎯 Form submitting - initDraft');
-						console.log('Tournament ID:', data.tournamentId);
-						return async ({ result, update }) => {
-							console.log('📋 Form result:', result);
-							await update();
-						};
-					}}>
-						<input type="hidden" name="tournamentId" value={data.tournamentId} />
-
+					<form method="POST" action="?/initDraft" use:enhance>
 						<div class="mb-4">
 							<label class="block text-sm font-medium mb-2">Timer Duration (seconds)</label>
 							<select
@@ -195,18 +238,11 @@
 							<p class="text-sm text-gray-600">
 								Golfers: {data.golfers?.length || 0}/24
 							</p>
-							<p class="text-sm text-gray-600">
-								Tournament ID: {data.tournamentId || 'MISSING'}
-							</p>
 						</div>
 
-						<Button type="submit" disabled={participants.length !== 6 || !data.tournamentId}>
+						<Button type="submit" disabled={participants.length !== 6}>
 							Initialize Draft
 						</Button>
-						
-						{#if !data.tournamentId}
-							<p class="text-red-500 text-sm mt-2">Error: No tournament ID available</p>
-						{/if}
 					</form>
 				{:else}
 					<p class="text-gray-600">Waiting for league owner to initialize the draft...</p>
@@ -214,68 +250,59 @@
 			</Card.Content>
 		</Card.Root>
 	{:else}
-		<!-- Draft Status Bar -->
+		<!-- Draft Status Bar with Controls -->
 		<Card.Root class="mb-6">
 			<Card.Content class="py-4">
 				<div class="flex flex-wrap items-center justify-between gap-4">
 					<div class="flex items-center gap-4">
 						<span
 							class="px-3 py-1 rounded-full text-sm font-medium
-							{draft.status === 'pending' ? 'bg-gray-200 text-gray-800' : ''}
-							{draft.status === 'in_progress' ? 'bg-green-200 text-green-800' : ''}
-							{draft.status === 'paused' ? 'bg-yellow-200 text-yellow-800' : ''}
-							{draft.status === 'completed' ? 'bg-blue-200 text-blue-800' : ''}"
+							{draftStatus === 'pending' ? 'bg-gray-200 text-gray-800' : ''}
+							{draftStatus === 'in_progress' ? 'bg-green-200 text-green-800' : ''}
+							{draftStatus === 'paused' ? 'bg-yellow-200 text-yellow-800' : ''}
+							{draftStatus === 'completed' ? 'bg-blue-200 text-blue-800' : ''}"
 						>
-							{draft.status.replace('_', ' ').toUpperCase()}
+							{draftStatus.replace('_', ' ').toUpperCase()}
 						</span>
 
 						<span class="text-sm">
-							Round {draft.current_round}/4 • Pick {draft.pick_history.length + 1}/24
+							Round {draft?.current_round || 1}/{totalRounds} • Pick {(draft?.pick_history?.length || 0) + 1}/{totalPicks}
+						</span>
+						
+						<span class="text-sm text-gray-500">
+							({data.fantasySettings?.pick_duration_seconds || 30}s per pick)
 						</span>
 					</div>
-
-					{#if draft.status === 'in_progress'}
-						<div class="flex items-center gap-2">
-							<span class="text-2xl font-mono font-bold {timerRemaining < 3000 ? 'text-red-600' : ''}">
-								{formatTime(timerRemaining)}
-							</span>
-						</div>
-					{/if}
 
 					<!-- Owner Controls -->
 					{#if isOwner}
 						<div class="flex gap-2">
-							{#if draft.status === 'pending'}
+							{#if draftStatus === 'pending'}
 								<form method="POST" action="?/startDraft" use:enhance>
-									<input type="hidden" name="tournamentId" value={data.tournamentId} />
 									<Button type="submit" variant="default">Start Draft</Button>
 								</form>
 							{/if}
 
-							{#if draft.status === 'in_progress'}
+							{#if draftStatus === 'in_progress'}
 								<form method="POST" action="?/pauseDraft" use:enhance>
-									<input type="hidden" name="tournamentId" value={data.tournamentId} />
 									<Button type="submit" variant="outline">Pause</Button>
 								</form>
 							{/if}
 
-							{#if draft.status === 'paused'}
+							{#if draftStatus === 'paused'}
 								<form method="POST" action="?/resumeDraft" use:enhance>
-									<input type="hidden" name="tournamentId" value={data.tournamentId} />
 									<Button type="submit" variant="default">Resume</Button>
 								</form>
 							{/if}
 
-							{#if draft.pick_history.length > 0 && draft.status !== 'in_progress'}
+							{#if (draft?.pick_history?.length ?? 0) > 0 && draftStatus !== 'in_progress'}
 								<form method="POST" action="?/undoPick" use:enhance>
-									<input type="hidden" name="tournamentId" value={data.tournamentId} />
 									<Button type="submit" variant="outline">Undo Last Pick</Button>
 								</form>
 							{/if}
 
-							{#if draft.status !== 'completed'}
+							{#if draftStatus !== 'completed'}
 								<form method="POST" action="?/resetDraft" use:enhance>
-									<input type="hidden" name="tournamentId" value={data.tournamentId} />
 									<Button type="submit" variant="destructive">Reset Draft</Button>
 								</form>
 							{/if}
@@ -285,25 +312,105 @@
 			</Card.Content>
 		</Card.Root>
 
-		<!-- Current Drafter -->
-		{#if draft.status === 'in_progress' || draft.status === 'paused'}
-			<Card.Root class="mb-6 {isMyTurn ? 'border-green-500 border-2' : ''}">
-				<Card.Header>
-					<Card.Title>
-						{#if isMyTurn}
-							Your Turn to Pick!
+		<!-- On the Clock / Next Up Section (when draft is active) -->
+		{#if draftStatus === 'in_progress' || draftStatus === 'paused'}
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+				<!-- On the Clock -->
+				<Card.Root class="border-2 {isMyTurn ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}">
+					<Card.Header class="pb-2">
+						<Card.Title class="flex items-center gap-2 text-lg">
+							<span class="relative flex h-3 w-3">
+								<span class="animate-ping absolute inline-flex h-full w-full rounded-full {isMyTurn ? 'bg-green-400' : 'bg-red-400'} opacity-75"></span>
+								<span class="relative inline-flex rounded-full h-3 w-3 {isMyTurn ? 'bg-green-500' : 'bg-red-500'}"></span>
+							</span>
+							ON THE CLOCK
+						</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-center">
+							<p class="text-2xl font-bold {isMyTurn ? 'text-green-700' : 'text-gray-900'}">
+								{isMyTurn ? 'YOU' : getParticipantName(draft?.current_drafter || '')}
+							</p>
+							{#if draftStatus === 'in_progress'}
+								<p class="text-5xl font-mono font-bold mt-2 {timerRemaining < 10000 ? 'text-red-600 animate-pulse' : 'text-gray-700'}">
+									{formatTime(timerRemaining)}
+								</p>
+							{:else}
+								<p class="text-lg text-yellow-600 mt-2">PAUSED</p>
+							{/if}
+							{#if recommendedPick}
+								<p class="text-sm text-gray-600 mt-3">
+									Auto-pick if time expires: <span class="font-semibold">{recommendedPick.name}</span>
+								</p>
+							{/if}
+						</div>
+					</Card.Content>
+				</Card.Root>
+
+				<!-- Recommended Pick -->
+				<Card.Root class="border-2 border-green-300 bg-green-50">
+					<Card.Header class="pb-2">
+						<Card.Title class="text-lg text-green-700">RECOMMENDED PICK</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						{#if recommendedPick}
+							<div class="text-center">
+								<p class="text-2xl font-bold text-gray-900">{recommendedPick.name}</p>
+								<p class="text-sm text-gray-600 mt-1">
+									Rank #{recommendedPick.ranking} • {recommendedPick.gender === 'male' ? '♂ Male' : '♀ Female'}
+								</p>
+								{#if isMyTurn && draftStatus === 'in_progress'}
+									<form method="POST" action="?/makePick" use:enhance class="mt-4">
+										<input type="hidden" name="golferId" value={recommendedPick.id} />
+										<Button type="submit" size="lg" class="w-full">
+											Pick {recommendedPick.name}
+										</Button>
+									</form>
+								{/if}
+							</div>
 						{:else}
-							Waiting for {getParticipantName(draft.current_drafter)}
+							<p class="text-gray-500 text-center">No recommendation available</p>
 						{/if}
-					</Card.Title>
-					{#if recommendedPick}
-						<Card.Description>
-							Recommended: {recommendedPick.name} (Rank #{recommendedPick.ranking}, {recommendedPick.gender})
-						</Card.Description>
-					{/if}
-				</Card.Header>
-			</Card.Root>
+					</Card.Content>
+				</Card.Root>
+			</div>
 		{/if}
+
+		<!-- Draft Order (horizontal layout) -->
+		<Card.Root class="mb-6">
+			<Card.Header class="pb-2">
+				<Card.Title>Draft Order</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				<div class="flex flex-wrap gap-2">
+					{#each draft?.draft_order || data.draftOrder || [] as oderId, index (oderId)}
+						{@const teamComp = draft?.team_compositions?.[oderId]}
+						{@const draftOrder = draft?.draft_order || data.draftOrder || []}
+						{@const currentDrafterIndex = draftOrder.indexOf(draft?.current_drafter || '')}
+						{@const isOnClock = oderId === draft?.current_drafter && draftStatus === 'in_progress'}
+						{@const isUpNext = index === (currentDrafterIndex + 1) % draftOrder.length && draftStatus === 'in_progress'}
+						<div
+							class="flex flex-col items-center px-3 py-2 rounded-lg text-sm
+							{isOnClock ? 'bg-green-100 border-2 border-green-500' : isUpNext ? 'bg-blue-100 border-2 border-blue-400' : 'bg-gray-100'}
+							{oderId === currentUserId ? 'font-bold' : ''}"
+						>
+							<span class="font-medium">
+								{index + 1}. {getParticipantName(oderId)}
+								{oderId === currentUserId ? '(You)' : ''}
+							</span>
+							<span class="text-xs text-gray-500">
+								{teamComp?.total_picks || 0}/4
+							</span>
+							{#if isOnClock}
+								<span class="text-xs text-green-600 font-semibold mt-1">On the clock</span>
+							{:else if isUpNext}
+								<span class="text-xs text-blue-600 font-semibold mt-1">Up next</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</Card.Content>
+		</Card.Root>
 
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 			<!-- Available Golfers -->
@@ -312,7 +419,7 @@
 					<Card.Header>
 						<Card.Title>
 							Available Golfers ({filteredGolfers.length})
-							{#if draft.current_round >= 3}
+							{#if (draft?.current_round ?? 1) >= 3}
 								<span class="text-sm font-normal text-gray-500">
 									(Filtered for gender balance)
 								</span>
@@ -333,11 +440,15 @@
 										</span>
 									</div>
 
-									{#if isMyTurn && draft.status === 'in_progress'}
+									{#if draftStatus === 'in_progress'}
 										<form method="POST" action="?/makePick" use:enhance>
-											<input type="hidden" name="tournamentId" value={data.tournamentId} />
 											<input type="hidden" name="golferId" value={golfer.id} />
-											<Button type="submit" size="sm" variant={golfer.id === recommendedPick?.id ? 'default' : 'outline'}>
+											<Button 
+												type="submit" 
+												size="sm" 
+												variant={golfer.id === recommendedPick?.id ? 'default' : 'outline'}
+												disabled={!isMyTurn}
+											>
 												Pick
 											</Button>
 										</form>
@@ -349,44 +460,15 @@
 				</Card.Root>
 			</div>
 
-			<!-- Teams & Pick History -->
+			<!-- Recent Picks -->
 			<div class="space-y-6">
-				<!-- Draft Order -->
-				<Card.Root>
-					<Card.Header>
-						<Card.Title>Draft Order</Card.Title>
-					</Card.Header>
-					<Card.Content>
-						<div class="space-y-2">
-							{#each draft.draft_order as userId, index (userId)}
-								{@const teamComp = draft.team_compositions[userId]}
-								<div
-									class="flex items-center justify-between p-2 rounded
-									{userId === draft.current_drafter && draft.status === 'in_progress' ? 'bg-green-100 border border-green-500' : 'bg-gray-50'}
-									{userId === currentUserId ? 'font-bold' : ''}"
-								>
-									<span>
-										{index + 1}. {getParticipantName(userId)}
-										{userId === currentUserId ? '(You)' : ''}
-									</span>
-									<span class="text-sm text-gray-500">
-										{teamComp?.total_picks || 0}/4
-										({teamComp?.male_count || 0}M, {teamComp?.female_count || 0}F)
-									</span>
-								</div>
-							{/each}
-						</div>
-					</Card.Content>
-				</Card.Root>
-
-				<!-- Recent Picks -->
 				<Card.Root>
 					<Card.Header>
 						<Card.Title>Recent Picks</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<div class="space-y-2 max-h-64 overflow-y-auto">
-							{#each [...draft.pick_history].reverse().slice(0, 10) as pick (pick.pick_number)}
+							{#each [...(draft?.pick_history || [])].reverse().slice(0, 10) as pick (pick.pick_number)}
 								<div class="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
 									<span>
 										#{pick.pick_number} - {pick.golfer_name}
@@ -398,7 +480,7 @@
 								</div>
 							{/each}
 
-							{#if draft.pick_history.length === 0}
+							{#if (draft?.pick_history?.length ?? 0) === 0}
 								<p class="text-gray-500 text-sm">No picks yet</p>
 							{/if}
 						</div>
@@ -408,7 +490,7 @@
 		</div>
 
 		<!-- Completed Draft Summary -->
-		{#if draft.status === 'completed'}
+		{#if draftStatus === 'completed'}
 			<Card.Root class="mt-6">
 				<Card.Header>
 					<Card.Title>Draft Complete!</Card.Title>
@@ -416,8 +498,8 @@
 				</Card.Header>
 				<Card.Content>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-						{#each draft.draft_order as userId (userId)}
-							{@const teamComp = draft.team_compositions[userId]}
+						{#each draft?.draft_order || [] as userId (userId)}
+							{@const teamComp = draft?.team_compositions?.[userId]}
 							<div class="border rounded p-4">
 								<h3 class="font-bold mb-2">
 									{getParticipantName(userId)}

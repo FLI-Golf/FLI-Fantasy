@@ -69,8 +69,21 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			}
 		}
 
-		// Get fantasy tournaments from expanded data
-		const fantasyTournaments = leagueRecord.expand?.fantasy_tournaments || [];
+		// Get fantasy tournaments directly from fantasy_tournament collection
+		const fantasyTournaments = await pb.collection('fantasy_tournament').getFullList({
+			filter: `fantasy_league = "${leagueId}"`,
+			sort: 'created'
+		});
+		
+		console.log('📋 Fantasy tournaments for league:', leagueId);
+		console.log('📋 Found tournaments:', fantasyTournaments.length);
+		fantasyTournaments.forEach(t => {
+			console.log(`  - ${t.id}: status="${t.status}", title="${t.title}", fantasy_league="${t.fantasy_league}"`);
+		});
+		
+		// Find the "next" tournament for the draft link
+		const nextTournament = fantasyTournaments.find(t => t.status === 'next') || fantasyTournaments[0];
+		console.log('📋 Next tournament:', nextTournament?.id, 'status:', nextTournament?.status, 'title:', nextTournament?.title);
 		
 		// For each fantasy tournament, we need to get the actual tournament details
 		// Since fantasy_tournament doesn't have a direct tournament relation,
@@ -106,6 +119,7 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			currentUser: pb.authStore.model,
 			tournaments: tournamentsData,
 			fantasyTournaments,
+			nextTournament, // The tournament with status="next" for draft link
 			upcomingTournaments // Preview of what will be generated
 		};
 	} catch (error) {

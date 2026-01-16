@@ -20,6 +20,16 @@
 		data.participants.filter((p) => p.status === 'approved')
 	);
 
+	// Helper to get user name from user ID
+	function getUserName(userId: string): string {
+		if (userId === data.currentUser?.id) return 'You';
+		const participant = data.participants.find((p) => p.user === userId);
+		if (participant?.expand?.user) {
+			return participant.expand.user.name || participant.expand.user.email || 'Player';
+		}
+		return 'Player';
+	}
+
 	// Debug logging
 	$effect(() => {
 		console.log('📊 Approved participants:', approvedParticipants);
@@ -154,7 +164,7 @@
 									<div class="flex items-start justify-between mb-2">
 										<div>
 											<h4 class="font-semibold text-black">
-												{fantasyTournament.name || 'Tournament'}
+												{fantasyTournament.title || 'Tournament'}
 											</h4>
 											<p class="text-sm text-gray-600">
 												{fantasyTournament.draft_order?.length || 0} participants
@@ -168,22 +178,24 @@
 										<div class="mt-3 pt-3 border-t border-gray-200">
 											<p class="text-xs text-gray-600 mb-2">Draft Order:</p>
 											<div class="flex flex-wrap gap-2">
-												{#each fantasyTournament.draft_order as userId, index}
+												{#each fantasyTournament.draft_order as oderId, index}
 													<span class="px-2 py-1 bg-[#2F91F6] text-white text-xs font-semibold rounded">
-														{index + 1}. {userId === data.currentUser?.id ? 'You' : 'Player'}
+														{index + 1}. {getUserName(oderId)}
 													</span>
 												{/each}
 											</div>
 										</div>
-										<div class="mt-4">
-											<a
-												href="/fantasyleagues/{data.league.id}/draft"
-												class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
-											>
-												<ArrowRight class="h-4 w-4" />
-												Go to Draft
-											</a>
-										</div>
+										{#if data.nextTournament}
+											<div class="mt-4">
+												<a
+													href="/fantasyleagues/{data.nextTournament.id}/draft"
+													class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+												>
+													<ArrowRight class="h-4 w-4" />
+													Go to Draft
+												</a>
+											</div>
+										{/if}
 									{/if}
 								</div>
 							{/each}
@@ -404,8 +416,8 @@
 						<Card.Title class="text-black">Owner Actions</Card.Title>
 					</Card.Header>
 					<Card.Content class="space-y-3">
-						{#if data.fantasyTournaments && data.fantasyTournaments.length > 0}
-							<a href="/fantasyleagues/{data.league.id}/draft">
+						{#if data.nextTournament}
+							<a href="/fantasyleagues/{data.nextTournament.id}/draft">
 								<Button class="w-full bg-green-600 hover:bg-green-700 text-white">
 									Go to Draft
 								</Button>

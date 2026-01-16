@@ -8,6 +8,9 @@
 
 	let { data } = $props();
 	
+	const categories = $derived(data?.categories ?? []);
+	const products = $derived(data?.products ?? []);
+	
 	function formatPrice(cents: number): string {
 		return `$${(cents / 100).toFixed(2)}`;
 	}
@@ -46,12 +49,12 @@
 	</div>
 
 	<!-- Categories Filter -->
-	{#if data.categories.length > 0}
+	{#if categories.length > 0}
 		<div class="flex gap-2 flex-wrap">
 			<Button variant="outline" class="bg-white/10 text-white border-white/20 hover:bg-white/20">
 				All Products
 			</Button>
-			{#each data.categories as category}
+			{#each categories as category}
 				<Button variant="outline" class="bg-white/10 text-white border-white/20 hover:bg-white/20">
 					{category.name}
 				</Button>
@@ -60,7 +63,7 @@
 	{/if}
 
 	<!-- Products Grid -->
-	{#if data.products.length === 0}
+	{#if products.length === 0}
 		<Card.Root class="bg-white">
 			<Card.Content class="py-12 text-center">
 				<div class="flex justify-center mb-4">
@@ -74,7 +77,7 @@
 		</Card.Root>
 	{:else}
 		<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-			{#each data.products as product}
+			{#each products as product}
 				<Card.Root class="bg-white hover:shadow-2xl transition-shadow overflow-hidden">
 					<!-- Product Image -->
 					{#if product.images && product.images.length > 0}
