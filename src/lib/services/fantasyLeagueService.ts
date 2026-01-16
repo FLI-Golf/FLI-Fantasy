@@ -703,7 +703,8 @@ export class FantasyLeagueService {
 					draft_order: draftOrder,
 					draft_results: null,
 					fantasy_settings: fantasySettings,
-					draft_managment: draftManagement // Note: typo in DB field name
+					draft_managment: draftManagement, // Note: typo in DB field name
+					filled: true // Required boolean - true means tournament is ready/filled with participants
 				};
 
 				// Add tournament reference if field exists

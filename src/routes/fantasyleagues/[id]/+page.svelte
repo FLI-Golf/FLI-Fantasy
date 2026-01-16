@@ -175,6 +175,15 @@
 												{/each}
 											</div>
 										</div>
+										<div class="mt-4">
+											<a
+												href="/fantasyleagues/{data.league.id}/draft"
+												class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+											>
+												<ArrowRight class="h-4 w-4" />
+												Go to Draft
+											</a>
+										</div>
 									{/if}
 								</div>
 							{/each}
@@ -395,10 +404,23 @@
 						<Card.Title class="text-black">Owner Actions</Card.Title>
 					</Card.Header>
 					<Card.Content class="space-y-3">
-						<Button class="w-full bg-black hover:bg-gray-800 text-white" disabled>
-							Start Draft
-							<span class="text-xs ml-2">(Coming Soon)</span>
-						</Button>
+						{#if data.fantasyTournaments && data.fantasyTournaments.length > 0}
+							<a href="/fantasyleagues/{data.league.id}/draft">
+								<Button class="w-full bg-green-600 hover:bg-green-700 text-white">
+									Go to Draft
+								</Button>
+							</a>
+						{:else if data.participants.length >= 6}
+							<form method="POST" action="?/generateTournaments" use:enhance>
+								<Button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white">
+									Generate Tournaments
+								</Button>
+							</form>
+						{:else}
+							<Button class="w-full bg-gray-400 text-white" disabled>
+								Need {6 - data.participants.length} more participants
+							</Button>
+						{/if}
 						<Button variant="outline" class="w-full" disabled>
 							League Settings
 							<span class="text-xs ml-2">(Coming Soon)</span>

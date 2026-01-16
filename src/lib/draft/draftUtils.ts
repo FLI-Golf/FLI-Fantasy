@@ -13,6 +13,7 @@ export interface DraftGolfer {
 	gender: Gender;
 	drafted: boolean;
 	drafted_by: string | null;
+	ranking?: number | null; // 1 = best, lower is better. Undefined/null defaults to 999
 }
 
 export interface TeamComposition {
@@ -317,6 +318,128 @@ export function validateDraftPick(
  */
 export function formatPickNumber(round: number, pick: number): string {
 	return `Round ${round}, Pick ${pick + 1}`;
+}
+
+/**
+ * Default ranking for golfers without a ranking
+ */
+export const DEFAULT_RANKING = 999;
+
+/**
+ * Get effective ranking for a golfer (handles undefined/null)
+ * @param golfer - Golfer to get ranking for
+ * @returns Ranking number (lower is better)
+ */
+export function getEffectiveRanking(golfer: DraftGolfer): number {
+	return golfer.ranking ?? DEFAULT_RANKING;
+}
+
+/**
+ * Sort golfers by ranking (best first)
+ * @param golfers - Golfers to sort
+ * @returns Sorted golfers array (does not mutate original)
+ */
+export function sortGolfersByRanking(golfers: DraftGolfer[]): DraftGolfer[] {
+	return [...golfers].sort((a, b) => getEffectiveRanking(a) - getEffectiveRanking(b));
+}
+
+/**
+ * Get the best ranked available golfer (recommended pick)
+ * Respects gender filtering in rounds 3+
+ * @param availableGolfers - All golfers in draft
+ * @param teamComposition - Current team composition
+ * @param currentRound - Current round number
+ * @param totalRounds - Total rounds in draft
+ * @returns Best ranked golfer from filtered list, or null if none available
+ */
+export function getBestRankedPick(
+	availableGolfers: DraftGolfer[],
+	teamComposition: TeamComposition,
+	currentRound: number,
+	totalRounds: number
+): DraftGolfer | null {
+	const { filteredGolfers } = getRecommendedPick(
+		availableGolfers,
+		teamComposition,
+		currentRound,
+		totalRounds
+	);
+
+	if (filteredGolfers.length === 0) {
+		return null;
+	}
+
+	const sorted = sortGolfersByRanking(filteredGolfers);
+	return sorted[0];
+}
+
+/**
+ * Timer duration options in seconds
+ */
+export const TIMER_OPTIONS = [7, 15, 30, 45] as const;
+export type TimerDuration = typeof TIMER_OPTIONS[number];
+
+/**
+ * Check if timer duration is valid
+ * @param duration - Duration to check
+ * @returns Whether duration is valid
+ */
+export function isValidTimerDuration(duration: number): duration is TimerDuration {
+	return TIMER_OPTIONS.includes(duration as TimerDuration);
+}
+
+/**
+ * Auto-pick result when timer expires
+ */
+export interface AutoPickResult {
+	golfer: DraftGolfer;
+	wasAutoPick: true;
+}
+
+/**
+ * Execute auto-pick when timer expires
+ * Returns the best ranked available golfer respecting gender filters
+ * @param draftState - Current draft state
+ * @param userId - User whose timer expired
+ * @returns Auto-pick result or null if no valid pick available
+ */
+export function executeAutoPick(
+	draftState: DraftState,
+	userId: string
+): AutoPickResult | null {
+	if (draftState.current_drafter !== userId) {
+		return null;
+	}
+
+	if (draftState.draft_completed || !draftState.draft_started) {
+		return null;
+	}
+
+	const teamComposition = draftState.team_compositions[userId];
+	if (!teamComposition) {
+		return null;
+	}
+
+	// Determine current round from overall pick count
+	const totalParticipants = Object.keys(draftState.team_compositions).length;
+	const overallPick = (draftState.current_round - 1) * totalParticipants + draftState.current_pick;
+	const currentRound = Math.floor(overallPick / totalParticipants) + 1;
+
+	const bestPick = getBestRankedPick(
+		draftState.available_golfers,
+		teamComposition,
+		currentRound,
+		4 // Total rounds is fixed at 4
+	);
+
+	if (!bestPick) {
+		return null;
+	}
+
+	return {
+		golfer: bestPick,
+		wasAutoPick: true
+	};
 }
 
 /**

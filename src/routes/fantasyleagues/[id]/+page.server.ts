@@ -261,5 +261,37 @@ export const actions: Actions = {
 			const errorMessage = error.data?.message || error.message || 'Failed to request to join league';
 			return fail(500, { error: errorMessage });
 		}
+	},
+
+	generateTournaments: async ({ cookies, params }) => {
+		const pb = createServerPocketBase();
+		const allCookies = cookies.getAll();
+		const cookieString = allCookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+		pb.authStore.loadFromCookie(cookieString);
+
+		if (!pb.authStore.isValid) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const userId = pb.authStore.model?.id;
+
+		try {
+			const leagueService = new FantasyLeagueService(pb);
+			const isOwner = await leagueService.isLeagueOwner(params.id, userId);
+
+			if (!isOwner) {
+				return fail(403, { error: 'Only league owner can generate tournaments' });
+			}
+
+			console.log('🎯 MANUAL TOURNAMENT GENERATION TRIGGERED');
+			const tournaments = await leagueService.generateFantasyTournaments(params.id);
+			console.log(`✅ Generated ${tournaments.length} fantasy tournaments`);
+			
+			return { success: true, action: 'tournaments_generated', count: tournaments.length };
+		} catch (error: any) {
+			console.error('❌ Error generating tournaments:', error);
+			return fail(500, { error: `Failed to generate tournaments: ${error.message}` });
+		}
 	}
 };
