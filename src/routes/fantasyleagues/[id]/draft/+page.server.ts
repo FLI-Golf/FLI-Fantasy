@@ -302,6 +302,46 @@ export const actions: Actions = {
 				}
 			}
 
+			// Refresh available_golfers from current golfers collection
+			// This ensures any roster changes (injuries, replacements) are reflected
+			const teams = await pb.collection('teams').getFullList({
+				filter: 'reserves = false'
+			});
+
+			const golferIds: string[] = [];
+			const golferTeamMap: Record<string, string> = {};
+			
+			teams.forEach((team) => {
+				if (team.male_golfer) {
+					golferIds.push(team.male_golfer);
+					golferTeamMap[team.male_golfer] = team.name;
+				}
+				if (team.female_golfer) {
+					golferIds.push(team.female_golfer);
+					golferTeamMap[team.female_golfer] = team.name;
+				}
+			});
+
+			if (golferIds.length > 0) {
+				const golfersData = await pb.collection('golfers').getFullList({
+					filter: golferIds.map((id) => `id = "${id}"`).join(' || '),
+					sort: 'world_ranking'
+				});
+
+				draftData.available_golfers = golfersData.map((g) => ({
+					id: g.id,
+					name: g.name,
+					team: golferTeamMap[g.id] || '',
+					team_id: '',
+					gender: g.gender?.toLowerCase() as 'male' | 'female',
+					ranking: g.world_ranking || 999,
+					drafted: false,
+					drafted_by: null
+				}));
+
+				console.log(`✅ Refreshed available_golfers with ${draftData.available_golfers.length} golfers`);
+			}
+
 			const updatedDraft = startDraft(draftData as DraftManagement);
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
@@ -312,11 +352,14 @@ export const actions: Actions = {
 			updatedDraft.timer_started_at = now;
 			updatedDraft.started_at = now;
 
+			// Update tournament with draft data and set status to in_progress
 			await pb.collection('fantasy_tournament').update(tournamentId, {
-				draft_managment: updatedDraft
+				draft_managment: updatedDraft,
+				status: 'in_progress'
 			});
 
 			console.log('Draft started with timer_started_at:', updatedDraft.timer_started_at);
+			console.log('Tournament status set to in_progress');
 			return { success: true, action: 'draft_started' };
 		} catch (error: any) {
 			console.error('Error starting draft:', error);
@@ -519,12 +562,38 @@ export const actions: Actions = {
 				};
 			}
 
-			await pb.collection('fantasy_tournament').update(tournamentId, {
+			// Check if draft is complete
+			const isDraftComplete = updatedDraft.status === 'completed';
+
+			// Update tournament - set status to 'complete' if draft finished
+			const updateData: Record<string, any> = {
 				draft_managment: updatedDraft,
 				draft_results: draftResults
-			});
+			};
 
-			return { success: true, action: 'pick_made' };
+			if (isDraftComplete) {
+				updateData.status = 'complete';
+				console.log('✅ Draft complete! Updating tournament status to complete');
+				
+				// Find and set the next tournament to 'next' status
+				const allTournaments = await pb.collection('fantasy_tournament').getFullList({
+					filter: `fantasy_league = "${tournament.fantasy_league}"`,
+					sort: 'created'
+				});
+				
+				const currentIndex = allTournaments.findIndex(t => t.id === tournamentId);
+				if (currentIndex >= 0 && currentIndex < allTournaments.length - 1) {
+					const nextTournament = allTournaments[currentIndex + 1];
+					await pb.collection('fantasy_tournament').update(nextTournament.id, {
+						status: 'next'
+					});
+					console.log(`✅ Set next tournament ${nextTournament.id} to 'next' status`);
+				}
+			}
+
+			await pb.collection('fantasy_tournament').update(tournamentId, updateData);
+
+			return { success: true, action: isDraftComplete ? 'draft_complete' : 'pick_made' };
 		} catch (error: any) {
 			console.error('Error making pick:', error);
 			return fail(500, { error: error.message || 'Failed to make pick' });
@@ -574,12 +643,38 @@ export const actions: Actions = {
 				};
 			}
 
-			await pb.collection('fantasy_tournament').update(tournamentId, {
+			// Check if draft is complete
+			const isDraftComplete = updatedDraft.status === 'completed';
+
+			// Update tournament - set status to 'complete' if draft finished
+			const updateData: Record<string, any> = {
 				draft_managment: updatedDraft,
 				draft_results: draftResults
-			});
+			};
 
-			return { success: true, action: 'auto_pick_made', golferId: autoPick.id };
+			if (isDraftComplete) {
+				updateData.status = 'complete';
+				console.log('✅ Draft complete (auto-pick)! Updating tournament status to complete');
+				
+				// Find and set the next tournament to 'next' status
+				const allTournaments = await pb.collection('fantasy_tournament').getFullList({
+					filter: `fantasy_league = "${tournament.fantasy_league}"`,
+					sort: 'created'
+				});
+				
+				const currentIndex = allTournaments.findIndex(t => t.id === tournamentId);
+				if (currentIndex >= 0 && currentIndex < allTournaments.length - 1) {
+					const nextTournament = allTournaments[currentIndex + 1];
+					await pb.collection('fantasy_tournament').update(nextTournament.id, {
+						status: 'next'
+					});
+					console.log(`✅ Set next tournament ${nextTournament.id} to 'next' status`);
+				}
+			}
+
+			await pb.collection('fantasy_tournament').update(tournamentId, updateData);
+
+			return { success: true, action: isDraftComplete ? 'draft_complete' : 'auto_pick_made', golferId: autoPick.id };
 		} catch (error: any) {
 			console.error('Error auto-picking:', error);
 			return fail(500, { error: error.message || 'Failed to auto-pick' });
