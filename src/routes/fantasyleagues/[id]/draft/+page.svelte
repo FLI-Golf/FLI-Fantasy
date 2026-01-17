@@ -74,21 +74,31 @@
 	$: recommendedPick = filteredGolfers[0] || null;
 
 	// Get timer duration from fantasy_settings or draft
-	$: timerDurationMs = ((data.fantasySettings?.pick_duration_seconds || draft?.timer_duration || 30) * 1000);
+	$: timerDurationMs = ((data.fantasySettings?.pick_duration_seconds || draft?.timer_duration || 7) * 1000);
 	
 	// Track when current pick started (for local timer)
 	let pickStartTime: number | null = null;
 	let lastDrafter: string | null = null;
+	let isAutoPickInProgress = false;
 	
 	// Initialize timer when draft becomes in_progress or drafter changes
 	$: if (draft && draftStatus === 'in_progress') {
+		// Always use server time if available
 		if (draft.timer_started_at) {
-			// Use server time
 			const serverStart = new Date(draft.timer_started_at).getTime();
 			const elapsed = Date.now() - serverStart;
-			timerRemaining = Math.max(0, timerDurationMs - elapsed);
+			const remaining = Math.max(0, timerDurationMs - elapsed);
+			
+			// Only update if drafter changed or significant time difference
+			if (draft.current_drafter !== lastDrafter) {
+				console.log('🔄 Drafter changed to:', draft.current_drafter, 'Timer:', remaining);
+				lastDrafter = draft.current_drafter;
+				pickStartTime = Date.now();
+				timerRemaining = remaining;
+			}
 		} else if (draft.current_drafter !== lastDrafter) {
-			// New drafter, start local timer
+			// No server time, use local timer
+			console.log('🔄 Starting local timer for:', draft.current_drafter);
 			pickStartTime = Date.now();
 			lastDrafter = draft.current_drafter;
 			timerRemaining = timerDurationMs;
@@ -113,7 +123,7 @@
 			}
 
 			// Auto-pick if timer expired and it's someone's turn
-			if (timerRemaining <= 0 && draft.current_drafter) {
+			if (timerRemaining <= 0 && draft.current_drafter && !isAutoPickInProgress) {
 				triggerAutoPick();
 			}
 		} else {
@@ -124,6 +134,11 @@
 
 	// Trigger auto-pick
 	async function triggerAutoPick() {
+		if (isAutoPickInProgress) return;
+		
+		isAutoPickInProgress = true;
+		console.log('⏰ Timer expired, triggering auto-pick for:', draft?.current_drafter);
+		
 		try {
 			const response = await fetch('?/autoPick', {
 				method: 'POST',
@@ -131,10 +146,18 @@
 			});
 
 			if (response.ok) {
+				console.log('✅ Auto-pick successful, refreshing data...');
+				// Reset timer tracking for next pick
+				pickStartTime = null;
+				lastDrafter = null;
 				await invalidateAll();
+			} else {
+				console.error('❌ Auto-pick failed:', response.status);
 			}
 		} catch (error) {
-			console.error('Auto-pick failed:', error);
+			console.error('❌ Auto-pick error:', error);
+		} finally {
+			isAutoPickInProgress = false;
 		}
 	}
 

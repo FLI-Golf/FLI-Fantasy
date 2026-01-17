@@ -283,11 +283,22 @@ export const actions: Actions = {
 			
 			// Ensure all required fields exist
 			draftData.draft_order = draftData.draft_order || tournament.draft_order || [];
-			draftData.timer_duration = draftData.timer_duration || tournament.fantasy_settings?.pick_duration_seconds || 30;
+			draftData.timer_duration = draftData.timer_duration || tournament.fantasy_settings?.pick_duration_seconds || 7;
 			draftData.total_rounds = draftData.total_rounds || tournament.fantasy_settings?.rounds || 4;
 			draftData.current_round = draftData.current_round || 1;
+			draftData.current_pick = draftData.current_pick ?? 0;
+			// Handle both field names: current_direction (new) and draft_direction (old)
+			draftData.current_direction = draftData.current_direction || draftData.draft_direction || 'down';
+			draftData.current_drafter = draftData.current_drafter || draftData.draft_order[0];
 			draftData.pick_history = draftData.pick_history || [];
 			draftData.team_compositions = draftData.team_compositions || {};
+			
+			console.log('📋 Draft state before start:');
+			console.log('  current_round:', draftData.current_round);
+			console.log('  current_pick:', draftData.current_pick);
+			console.log('  current_direction:', draftData.current_direction);
+			console.log('  current_drafter:', draftData.current_drafter);
+			console.log('  draft_order:', draftData.draft_order);
 			
 			// Initialize team_compositions for each participant if not exists
 			for (const oderId of draftData.draft_order) {

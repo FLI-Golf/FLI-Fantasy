@@ -659,43 +659,96 @@ export class FantasyLeagueService {
 
 				// Create draft management object with available golfers
 				const draftManagement = {
-					available_golfers: golfers.map(g => ({
-						id: g.id,
-						name: g.name,
-						team: g.team, // Team name for display
-						team_id: golferTeamMap.get(g.id) || null, // Team ID reference
-						gender: g.gender || 'male',
-						drafted: false,
-						drafted_by: null,
-						recommended: false // Will be set dynamically during draft
-					})),
+					// Status
+					status: 'pending',
+					
+					// Draft order and position
+					draft_order: draftOrder,
 					current_pick: 0,
 					current_round: 1,
 					current_drafter: draftOrder[0],
-					draft_direction: 'down', // 'down' for odd rounds, 'up' for even rounds (snake draft)
-					draft_started: false,
-					draft_completed: false,
-					team_compositions: draftOrder.reduce((acc, userId) => {
-						acc[userId] = {
+					current_direction: 'down', // 'down' for odd rounds, 'up' for even rounds (snake draft)
+					
+					// Timer settings
+					timer_duration: fantasySettings.pick_duration_seconds,
+					timer_started_at: null,
+					timer_paused_at: null,
+					timer_remaining_ms: null,
+					
+					// Rounds
+					total_rounds: 4,
+					total_participants: 6,
+					
+					// Available golfers
+					available_golfers: golfers.map(g => ({
+						id: g.id,
+						name: g.name,
+						team: g.team,
+						team_id: golferTeamMap.get(g.id) || null,
+						gender: g.gender || 'male',
+						ranking: g.ranking || 999,
+						drafted: false,
+						drafted_by: null
+					})),
+					
+					// Team compositions
+					team_compositions: draftOrder.reduce((acc, oderId) => {
+						acc[oderId] = {
 							male_count: 0,
 							female_count: 0,
 							total_picks: 0,
-							fantasy_team: [] // Array of drafted golfers for this participant
+							fantasy_team: []
 						};
 						return acc;
-					}, {} as Record<string, any>)
+					}, {} as Record<string, any>),
+					
+					// History
+					pick_history: [],
+					
+					// Timestamps
+					created_at: new Date().toISOString(),
+					started_at: null,
+					completed_at: null,
+					
+					// Error tracking
+					last_error: null
 				};
 
 				// Create fantasy settings for draft
 				const rounds = 4;
 				const fantasySettings = {
-					start_pause: false, // true = paused, false = running
-					pick_duration_seconds: 30, // Options: 15, 30, 45 seconds per pick
-					pick_duration_options: [15, 30, 45], // Available timer options
-					rounds: rounds, // Total number of rounds
-					rounds_array: Array.from({ length: rounds }, (_, i) => i + 1), // [1, 2, 3, 4] for UI iteration
+					// Auto-draft settings
+					auto_draft_delay_seconds: 1,
 					auto_draft_enabled: true,
-					auto_draft_delay_seconds: 10 // Time before auto-pick kicks in
+					
+					// Timer settings
+					pick_duration_options: [7, 15, 30, 45],
+					pick_duration_seconds: 7,
+					
+					// Draft state
+					paused: true,
+					start_pause: false,
+					completed: false,
+					
+					// Rounds
+					rounds: rounds,
+					rounds_array: Array.from({ length: rounds }, (_, i) => i + 1),
+					
+					// Team composition rules
+					team_size: 4,
+					min_male_golfers: 2,
+					min_female_golfers: 2,
+					
+					// Draft type
+					draft_type: 'snake',
+					
+					// Participants
+					participants_required: 6,
+					
+					// Timestamps
+					started_at: null,
+					completed_at: null,
+					paused_at: null
 				};
 
 				const payload: any = {
