@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { pb } from '$lib/pocketbase';
-	import { formatScoreToPar, getScoreColorClass } from '$lib/scoring/scoreUtils';
+	import { formatScoreToPar, getScoreColorClass, getScoreColorClassLight } from '$lib/scoring/scoreUtils';
 	import { rankParticipantsByPoints } from '$lib/fantasy/fantasyUtils';
 	import Trophy from '@lucide/svelte/icons/trophy';
 	import Users from '@lucide/svelte/icons/users';
@@ -131,6 +131,7 @@
 						sort: 'position',
 						requestKey: `fantasy_prizes_${currentRequestId}`
 					});
+					console.log(`🏆 Loaded ${prizes.length} prizes for tournament ${tournamentIdForPrizes}:`, prizes);
 				} catch (err: any) {
 					// Prize collection might not exist yet
 					if (err.status !== 404 && err.status !== 0) {
@@ -286,6 +287,13 @@
 		if (prize.prize_type === 'money' && prize.prize_value) return `$${prize.prize_value}`;
 		return '';
 	}
+
+	function getDefaultPrizeLabel(rank: number): string {
+		if (rank === 1) return '🥇 Champion';
+		if (rank === 2) return '🥈 Runner-up';
+		if (rank === 3) return '🥉 Third';
+		return '';
+	}
 </script>
 
 {#if showTicker}
@@ -375,12 +383,13 @@
 				<p class="text-sm text-gray-400 mt-1">Teams will appear after the draft</p>
 			</div>
 		{:else}
-			<div class="divide-y divide-gray-100">
+			<div class="divide-y divide-gray-200">
 				{#each teams as teamData, i}
 					{@const badge = getRankBadge(teamData.rank)}
 					{@const prize = getPrizeForRank(teamData.rank)}
 					{@const isPrizePosition = teamData.rank <= 3}
-					<div class="p-4 hover:bg-gray-50 transition-colors {isPrizePosition ? 'bg-gradient-to-r from-yellow-50/50 to-transparent' : ''} {badge ? `border-l-4 ${badge.border}` : ''}">
+					{@const isEvenRow = i % 2 === 0}
+					<div class="p-4 hover:bg-blue-50 transition-colors {isEvenRow ? 'bg-white' : 'bg-gray-50'} {isPrizePosition ? 'border-l-4 ' + (badge?.border || 'border-yellow-400') : ''}">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-4">
 								<!-- Rank Badge -->
@@ -403,6 +412,10 @@
 											<span class="px-2 py-0.5 text-xs font-bold rounded-full {teamData.rank === 1 ? 'bg-yellow-400 text-yellow-900' : teamData.rank === 2 ? 'bg-gray-300 text-gray-800' : 'bg-amber-400 text-amber-900'}">
 												{getPrizeDisplay(prize)}
 											</span>
+										{:else if teamData.rank <= 3}
+											<span class="px-2 py-0.5 text-xs font-bold rounded-full {teamData.rank === 1 ? 'bg-yellow-400 text-yellow-900' : teamData.rank === 2 ? 'bg-gray-300 text-gray-800' : 'bg-amber-400 text-amber-900'}">
+												{getDefaultPrizeLabel(teamData.rank)}
+											</span>
 										{/if}
 									</div>
 									{#if !compact}
@@ -418,12 +431,24 @@
 
 							<!-- Score -->
 							<div class="text-right">
-								<div class="{getScoreColorClass(teamData.calculatedScore)} font-bold text-2xl bg-black/5 px-4 py-2 rounded-lg {isPrizePosition ? 'ring-2 ring-offset-1 ' + (badge?.border || '') : ''}">
+								<div class="{getScoreColorClassLight(teamData.calculatedScore)} font-bold text-2xl px-4 py-2 rounded-lg {isPrizePosition ? 'ring-2 ring-offset-1 ' + (badge?.border || '') : ''}">
 									{formatScoreToPar(teamData.calculatedScore)}
 								</div>
 								{#if prize && prize.prize_type === 'points' && prize.prize_value}
-									<div class="text-xs text-gray-500 mt-1">
+									<div class="text-xs text-green-600 font-semibold mt-1">
 										+{prize.prize_value} pts
+									</div>
+								{:else if teamData.rank === 1}
+									<div class="text-xs text-green-600 font-semibold mt-1">
+										+100 pts
+									</div>
+								{:else if teamData.rank === 2}
+									<div class="text-xs text-green-600 font-semibold mt-1">
+										+50 pts
+									</div>
+								{:else if teamData.rank === 3}
+									<div class="text-xs text-green-600 font-semibold mt-1">
+										+25 pts
 									</div>
 								{/if}
 							</div>
@@ -433,9 +458,9 @@
 							<!-- Golfer Breakdown -->
 							<div class="mt-3 ml-16 flex flex-wrap gap-2">
 								{#each teamData.golferScores as golfer}
-									<div class="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs">
-										<span class="text-gray-700">{golfer.golferName}</span>
-										<span class="{getScoreColorClass(golfer.score)} font-medium">
+									<div class="inline-flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded text-xs shadow-sm">
+										<span class="text-gray-700 font-medium">{golfer.golferName}</span>
+										<span class="{getScoreColorClassLight(golfer.score)} font-bold px-1.5 py-0.5 rounded">
 											{formatScoreToPar(golfer.score)}
 										</span>
 										{#if golfer.currentHole}

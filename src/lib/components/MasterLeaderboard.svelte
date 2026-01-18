@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { pb } from '$lib/pocketbase';
-	import { formatScoreToPar, getScoreColorClass, formatPosition } from '$lib/scoring/scoreUtils';
+	import { formatScoreToPar, getScoreColorClass, getScoreColorClassLight, formatPosition } from '$lib/scoring/scoreUtils';
 	import Trophy from '@lucide/svelte/icons/trophy';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
 	import TrendingDown from '@lucide/svelte/icons/trending-down';
@@ -222,7 +222,8 @@
 					<tbody>
 						{#each scores as score, i}
 							{#if score.expand?.golfer}
-								<tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors {i < 3 ? 'bg-yellow-50' : ''}">
+								{@const isEvenRow = i % 2 === 0}
+								<tr class="border-b border-gray-200 hover:bg-blue-50 transition-colors {isEvenRow ? 'bg-white' : 'bg-gray-50'} {i < 3 ? 'border-l-4 ' + (i === 0 ? 'border-yellow-400' : i === 1 ? 'border-gray-400' : 'border-amber-400') : ''}">
 									<td class="px-4 py-3">
 										<div class="flex items-center gap-2">
 											{#if i === 0}
@@ -250,7 +251,7 @@
 										</div>
 									</td>
 									<td class="px-4 py-3 text-center">
-										<span class="{getScoreColorClass(score.score)} font-bold text-lg bg-black/5 px-3 py-1 rounded">
+										<span class="{getScoreColorClassLight(score.score)} font-bold text-lg px-3 py-1 rounded">
 											{formatScoreToPar(score.score)}
 										</span>
 									</td>
