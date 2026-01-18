@@ -7,7 +7,20 @@
 	import Users from '@lucide/svelte/icons/users';
 	import Crown from '@lucide/svelte/icons/crown';
 	import Medal from '@lucide/svelte/icons/medal';
+	import Award from '@lucide/svelte/icons/award';
 	import TrendingUp from '@lucide/svelte/icons/trending-up';
+
+	interface FantasyPrize {
+		id: string;
+		fantasy_tournament: string;
+		position: number;
+		prize_type: 'points' | 'money' | 'custom';
+		prize_value?: number;
+		prize_label?: string;
+		prize_description?: string;
+		awarded_to?: string;
+		awarded_at?: string;
+	}
 
 	interface FantasyTeam {
 		id: string;
@@ -57,11 +70,13 @@
 	let { fantasyTournamentId, fantasyLeagueId, showTicker = false, compact = false }: Props = $props();
 
 	let teams: FantasyTeamWithScore[] = $state([]);
+	let prizes: FantasyPrize[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
 	let unsubscribe: (() => void) | null = null;
 	let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 	let tournamentTitle = $state('');
+	let activeTournamentId = $state<string | null>(null);
 
 	// Generate unique request keys to prevent auto-cancellation
 	let requestId = 0;
@@ -74,8 +89,11 @@
 			error = null;
 
 			let filter = '';
+			let tournamentIdForPrizes: string | null = null;
+			
 			if (fantasyTournamentId) {
 				filter = `fantasy_tournament = "${fantasyTournamentId}"`;
+				tournamentIdForPrizes = fantasyTournamentId;
 			} else if (fantasyLeagueId) {
 				// Get fantasy tournaments for this league - prioritize completed drafts, then in_progress
 				const tournaments = await pb.collection('fantasy_tournament').getFullList({
@@ -95,10 +113,30 @@
 					const tournamentIds = activeTournaments.map(t => `"${t.id}"`).join(',');
 					filter = `fantasy_tournament ?~ ${tournamentIds}`;
 					tournamentTitle = activeTournaments[0].title || 'Current Tournament';
+					tournamentIdForPrizes = activeTournaments[0].id;
 				} else {
 					teams = [];
 					loading = false;
 					return;
+				}
+			}
+			
+			activeTournamentId = tournamentIdForPrizes;
+			
+			// Load prizes for this tournament
+			if (tournamentIdForPrizes) {
+				try {
+					prizes = await pb.collection('fantasy_prize').getFullList<FantasyPrize>({
+						filter: `fantasy_tournament = "${tournamentIdForPrizes}"`,
+						sort: 'position',
+						requestKey: `fantasy_prizes_${currentRequestId}`
+					});
+				} catch (err: any) {
+					// Prize collection might not exist yet
+					if (err.status !== 404 && err.status !== 0) {
+						console.log('No prizes found for tournament');
+					}
+					prizes = [];
 				}
 			}
 
@@ -232,10 +270,21 @@
 	});
 
 	function getRankBadge(rank: number) {
-		if (rank === 1) return { icon: Crown, color: 'text-yellow-500', bg: 'bg-yellow-100' };
-		if (rank === 2) return { icon: Medal, color: 'text-gray-400', bg: 'bg-gray-100' };
-		if (rank === 3) return { icon: Medal, color: 'text-amber-600', bg: 'bg-amber-100' };
+		if (rank === 1) return { icon: Crown, color: 'text-yellow-500', bg: 'bg-yellow-100', border: 'border-yellow-400' };
+		if (rank === 2) return { icon: Medal, color: 'text-gray-400', bg: 'bg-gray-100', border: 'border-gray-300' };
+		if (rank === 3) return { icon: Medal, color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-400' };
 		return null;
+	}
+
+	function getPrizeForRank(rank: number): FantasyPrize | undefined {
+		return prizes.find(p => p.position === rank);
+	}
+
+	function getPrizeDisplay(prize: FantasyPrize): string {
+		if (prize.prize_label) return prize.prize_label;
+		if (prize.prize_type === 'points' && prize.prize_value) return `${prize.prize_value} pts`;
+		if (prize.prize_type === 'money' && prize.prize_value) return `$${prize.prize_value}`;
+		return '';
 	}
 </script>
 
@@ -260,8 +309,8 @@
 						</span>
 						{#each teams as teamData}
 							<div class="ticker-item inline-flex items-center mx-4 gap-2">
-								<span class="bg-white/20 px-2 py-0.5 rounded text-xs font-bold">
-									{teamData.rank}
+								<span class="px-2 py-0.5 rounded text-xs font-bold {teamData.rank === 1 ? 'bg-yellow-400 text-yellow-900' : teamData.rank === 2 ? 'bg-gray-300 text-gray-800' : teamData.rank === 3 ? 'bg-amber-400 text-amber-900' : 'bg-white/20'}">
+									{teamData.rank === 1 ? '🥇' : teamData.rank === 2 ? '🥈' : teamData.rank === 3 ? '🥉' : teamData.rank}
 								</span>
 								<span class="font-medium">
 									{teamData.team.expand?.user?.name || 'Unknown'}
@@ -274,8 +323,8 @@
 						<!-- Duplicate for seamless loop -->
 						{#each teams as teamData}
 							<div class="ticker-item inline-flex items-center mx-4 gap-2">
-								<span class="bg-white/20 px-2 py-0.5 rounded text-xs font-bold">
-									{teamData.rank}
+								<span class="px-2 py-0.5 rounded text-xs font-bold {teamData.rank === 1 ? 'bg-yellow-400 text-yellow-900' : teamData.rank === 2 ? 'bg-gray-300 text-gray-800' : teamData.rank === 3 ? 'bg-amber-400 text-amber-900' : 'bg-white/20'}">
+									{teamData.rank === 1 ? '🥇' : teamData.rank === 2 ? '🥈' : teamData.rank === 3 ? '🥉' : teamData.rank}
 								</span>
 								<span class="font-medium">
 									{teamData.team.expand?.user?.name || 'Unknown'}
@@ -329,27 +378,39 @@
 			<div class="divide-y divide-gray-100">
 				{#each teams as teamData, i}
 					{@const badge = getRankBadge(teamData.rank)}
-					<div class="p-4 hover:bg-gray-50 transition-colors {i < 3 ? 'bg-gradient-to-r from-yellow-50/50 to-transparent' : ''}">
+					{@const prize = getPrizeForRank(teamData.rank)}
+					{@const isPrizePosition = teamData.rank <= 3}
+					<div class="p-4 hover:bg-gray-50 transition-colors {isPrizePosition ? 'bg-gradient-to-r from-yellow-50/50 to-transparent' : ''} {badge ? `border-l-4 ${badge.border}` : ''}">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-4">
-								<!-- Rank -->
-								<div class="w-10 h-10 flex items-center justify-center rounded-full {badge?.bg || 'bg-gray-100'}">
+								<!-- Rank Badge -->
+								<div class="w-12 h-12 flex items-center justify-center rounded-full {badge?.bg || 'bg-gray-100'} {badge ? 'ring-2 ring-offset-1 ' + badge.border : ''}">
 									{#if badge}
 										{@const BadgeIcon = badge.icon}
-										<BadgeIcon class="h-5 w-5 {badge.color}" />
+										<BadgeIcon class="h-6 w-6 {badge.color}" />
 									{:else}
-										<span class="font-bold text-gray-600">{teamData.rank}</span>
+										<span class="font-bold text-gray-600 text-lg">{teamData.rank}</span>
 									{/if}
 								</div>
 
 								<!-- Team Info -->
 								<div>
-									<div class="font-semibold text-black">
-										{teamData.team.expand?.user?.name || 'Unknown Player'}
+									<div class="flex items-center gap-2">
+										<span class="font-semibold text-black text-lg">
+											{teamData.team.expand?.user?.name || 'Unknown Player'}
+										</span>
+										{#if prize}
+											<span class="px-2 py-0.5 text-xs font-bold rounded-full {teamData.rank === 1 ? 'bg-yellow-400 text-yellow-900' : teamData.rank === 2 ? 'bg-gray-300 text-gray-800' : 'bg-amber-400 text-amber-900'}">
+												{getPrizeDisplay(prize)}
+											</span>
+										{/if}
 									</div>
 									{#if !compact}
-										<div class="text-xs text-gray-500 mt-1">
-											{teamData.golferScores.length} golfers
+										<div class="text-xs text-gray-500 mt-1 flex items-center gap-2">
+											<span>{teamData.golferScores.length} golfers</span>
+											{#if teamData.rank === 1}
+												<span class="text-yellow-600 font-semibold">🏆 Leader</span>
+											{/if}
 										</div>
 									{/if}
 								</div>
@@ -357,15 +418,20 @@
 
 							<!-- Score -->
 							<div class="text-right">
-								<div class="{getScoreColorClass(teamData.calculatedScore)} font-bold text-xl bg-black/5 px-4 py-2 rounded-lg">
+								<div class="{getScoreColorClass(teamData.calculatedScore)} font-bold text-2xl bg-black/5 px-4 py-2 rounded-lg {isPrizePosition ? 'ring-2 ring-offset-1 ' + (badge?.border || '') : ''}">
 									{formatScoreToPar(teamData.calculatedScore)}
 								</div>
+								{#if prize && prize.prize_type === 'points' && prize.prize_value}
+									<div class="text-xs text-gray-500 mt-1">
+										+{prize.prize_value} pts
+									</div>
+								{/if}
 							</div>
 						</div>
 
 						{#if !compact && teamData.golferScores.length > 0}
 							<!-- Golfer Breakdown -->
-							<div class="mt-3 ml-14 flex flex-wrap gap-2">
+							<div class="mt-3 ml-16 flex flex-wrap gap-2">
 								{#each teamData.golferScores as golfer}
 									<div class="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs">
 										<span class="text-gray-700">{golfer.golferName}</span>
