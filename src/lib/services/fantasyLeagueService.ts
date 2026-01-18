@@ -555,7 +555,13 @@ export class FantasyLeagueService {
 	 * Generate fantasy tournaments for a league when minimum participants reached
 	 */
 	async generateFantasyTournaments(leagueId: string): Promise<FantasyTournament[]> {
+		console.log('═══════════════════════════════════════');
+		console.log('🎯 generateFantasyTournaments called');
+		console.log('League ID:', leagueId);
+		
 		const league = await this.pb.collection('fantasy_league').getOne(leagueId);
+		console.log('League found:', league.id, league.title);
+		console.log('League season:', league.season);
 		
 		// Default settings if not set
 		const defaultSettings: FantasySettings = {
@@ -567,6 +573,7 @@ export class FantasyLeagueService {
 		};
 		
 		const settings = (league.settings as FantasySettings) ?? defaultSettings;
+		console.log('Settings:', JSON.stringify(settings));
 		
 		// Get all approved participants for this league
 		const approvedParticipants = await this.pb.collection('fantasy_season_participants').getFullList({
@@ -574,13 +581,14 @@ export class FantasyLeagueService {
 		});
 
 		const approvedUserIds = approvedParticipants.map(p => p.user);
-		console.log(`Found ${approvedUserIds.length} approved participants`);
+		console.log(`Found ${approvedUserIds.length} approved participants:`, approvedUserIds);
 		
 		// Check if we have minimum participants
 		if (approvedUserIds.length < settings.min_participants) {
-			console.log(`Not enough participants: ${approvedUserIds.length}/${settings.min_participants}`);
+			console.log(`❌ Not enough participants: ${approvedUserIds.length}/${settings.min_participants}`);
 			return [];
 		}
+		console.log(`✅ Have enough participants: ${approvedUserIds.length}/${settings.min_participants}`);
 
 		// Get "next" and "upcoming" tournaments for the season
 		console.log('═══════════════════════════════════════');

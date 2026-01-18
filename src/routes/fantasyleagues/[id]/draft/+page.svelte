@@ -45,7 +45,7 @@
 	}
 
 	// Get available golfers for current drafter
-	$: availableGolfers = draft?.available_golfers.filter((g) => !g.drafted) || [];
+	$: availableGolfers = (draft?.available_golfers ?? []).filter((g) => !g.drafted);
 
 	// Get filtered golfers based on current round and team composition
 	$: filteredGolfers = (() => {

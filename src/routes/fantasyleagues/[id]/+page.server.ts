@@ -198,6 +198,63 @@ export const actions: Actions = {
 			console.log('✅ Calling approveParticipant...');
 			await leagueService.approveParticipant(params.id, participantId);
 			console.log('✅ Participant approved successfully');
+			
+			// Check if we now have 6 approved participants - auto-generate tournaments
+			const participants = await leagueService.getLeagueParticipants(params.id);
+			const approvedCount = participants.filter(p => p.status === 'approved').length;
+			console.log(`📊 Approved participants: ${approvedCount}/6`);
+			
+			if (approvedCount === 6) {
+				console.log('🎯 We have 6 approved participants!');
+				
+				// Check if tournaments already exist
+				const existingTournaments = await pb.collection('fantasy_tournament').getFullList({
+					filter: `fantasy_league = "${params.id}"`
+				});
+				console.log(`📋 Existing fantasy tournaments: ${existingTournaments.length}`);
+				
+				if (existingTournaments.length === 0) {
+					console.log('🎯 No existing tournaments - auto-generating...');
+					try {
+						const tournaments = await leagueService.generateFantasyTournaments(params.id);
+						console.log(`✅ Generated ${tournaments.length} fantasy tournaments`);
+						tournaments.forEach((t, i) => {
+							console.log(`  ${i + 1}. ${t.title} (status: ${t.status})`);
+						});
+						
+						// Create fantasy_team records for each participant in each tournament
+						const approvedParticipants = participants.filter(p => p.status === 'approved');
+						console.log(`🎯 Creating fantasy_team records for ${approvedParticipants.length} participants...`);
+						
+						for (const tournament of tournaments) {
+							for (const participant of approvedParticipants) {
+								await pb.collection('fantasy_team').create({
+									fantasy_tournament: tournament.id,
+									user: participant.user,
+									golfers: [],
+									total_score: 0
+								});
+							}
+							console.log(`  ✅ Created ${approvedParticipants.length} teams for ${tournament.title}`);
+						}
+						
+						return { success: true, action: 'approved_and_tournaments_generated', tournamentsGenerated: tournaments.length };
+					} catch (genError: any) {
+						console.error('❌ Error generating tournaments:', genError.message);
+						console.error('Stack:', genError.stack);
+						// Still return success for approval, but note the generation failed
+						return { success: true, action: 'approved', generationError: genError.message };
+					}
+				} else {
+					console.log(`ℹ️ Tournaments already exist (${existingTournaments.length}), skipping generation`);
+					existingTournaments.forEach((t, i) => {
+						console.log(`  ${i + 1}. ${t.title}`);
+					});
+				}
+			} else {
+				console.log(`ℹ️ Only ${approvedCount} approved, need 6 to generate tournaments`);
+			}
+			
 			return { success: true, action: 'approved' };
 		} catch (error: any) {
 			console.error('❌ Error approving participant:', error);

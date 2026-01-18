@@ -17,13 +17,13 @@
 	let { data, form } = $props();
 
 	const approvedParticipants = $derived(
-		data.participants.filter((p) => p.status === 'approved')
+		(data.participants ?? []).filter((p) => p.status === 'approved')
 	);
 
 	// Helper to get user name from user ID
 	function getUserName(userId: string): string {
 		if (userId === data.currentUser?.id) return 'You';
-		const participant = data.participants.find((p) => p.user === userId);
+		const participant = (data.participants ?? []).find((p) => p.user === userId);
 		if (participant?.expand?.user) {
 			return participant.expand.user.name || participant.expand.user.email || 'Player';
 		}
@@ -215,7 +215,7 @@
 							Need {data.league.settings?.min_participants || 6} participants to generate tournaments
 						</p>
 						<p class="text-sm text-gray-500 mb-4">
-							Current: {data.participants.length} / {data.league.settings?.min_participants || 6}
+							Current: {data.participants?.length ?? 0} / {data.league.settings?.min_participants || 6}
 						</p>
 						
 						{#if data.upcomingTournaments && data.upcomingTournaments.length > 0}
@@ -247,7 +247,7 @@
 			{/if}
 
 			<!-- Pending Requests (Owner Only) -->
-			{#if data.isOwner && data.pendingRequests.length > 0}
+			{#if data.isOwner && data.pendingRequests?.length > 0}
 				<Card.Root class="border-2 border-yellow-200 bg-white shadow-xl">
 					<Card.Header>
 						<Card.Title class="text-black flex items-center gap-2">
@@ -382,7 +382,7 @@
 						<div>
 							<p class="text-sm text-gray-600">Min Participants</p>
 							<p class="font-semibold text-black">
-								{data.participants.length} / {data.league.settings.min_participants}
+								{data.participants?.length ?? 0} / {data.league.settings?.min_participants ?? 6}
 							</p>
 						</div>
 						<div>
@@ -402,7 +402,7 @@
 							</span>
 						{:else}
 							<span class="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded">
-								Filling ({data.participants.length}/{data.league.settings?.min_participants || 6})
+								Filling ({data.participants?.length ?? 0}/{data.league.settings?.min_participants || 6})
 							</span>
 						{/if}
 					</div>
@@ -422,7 +422,7 @@
 									Go to Draft
 								</Button>
 							</a>
-						{:else if data.participants.length >= 6}
+						{:else if (data.participants?.length ?? 0) >= 6}
 							<form method="POST" action="?/generateTournaments" use:enhance>
 								<Button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white">
 									Generate Tournaments
@@ -430,7 +430,7 @@
 							</form>
 						{:else}
 							<Button class="w-full bg-gray-400 text-white" disabled>
-								Need {6 - data.participants.length} more participants
+								Need {6 - (data.participants?.length ?? 0)} more participants
 							</Button>
 						{/if}
 						<Button variant="outline" class="w-full" disabled>

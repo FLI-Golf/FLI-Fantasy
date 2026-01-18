@@ -80,7 +80,8 @@ export const fantasyTournamentSchema = z.object({
 	draft_results: z.any().optional(),
 	tournament: z.string().optional(), // Reference to actual tournament
 	name: z.string().optional(), // Name from the tournament
-	title: z.string().optional() // Formatted title with date and tournament name
+	title: z.string().optional(), // Formatted title with date and tournament name
+	draft_status: z.enum(['pending', 'in_progress', 'paused', 'completed']).optional()
 });
 
 export type FantasyTournament = z.infer<typeof fantasyTournamentSchema>;
