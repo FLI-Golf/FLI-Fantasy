@@ -9,6 +9,8 @@
 	import Eye from '@lucide/svelte/icons/eye';
 
 	let { data }: { data: { seasons: FantasySeason[] } } = $props();
+	
+	const seasons = $derived(data?.seasons ?? []);
 
 	function getStatusColor(status: string) {
 		switch (status) {
@@ -45,7 +47,7 @@
 	</div>
 
 	<!-- Seasons List -->
-	{#if data.seasons.length === 0}
+	{#if seasons.length === 0}
 				<Card.Root class="border-2 border-gray-200 bg-white">
 					<Card.Content class="py-12 text-center">
 						<div class="flex justify-center mb-4">
@@ -70,7 +72,7 @@
 				</Card.Root>
 			{:else}
 				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-					{#each data.seasons as season}
+					{#each seasons as season}
 						<Card.Root
 							class="border-2 border-gray-200 hover:border-[#2F91F6] transition-all hover:shadow-2xl bg-white"
 						>

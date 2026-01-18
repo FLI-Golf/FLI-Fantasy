@@ -17,8 +17,18 @@
 	let { data, form } = $props();
 
 	const approvedParticipants = $derived(
-		data.participants.filter((p) => p.status === 'approved')
+		(data.participants ?? []).filter((p) => p.status === 'approved')
 	);
+
+	// Helper to get user name from user ID
+	function getUserName(userId: string): string {
+		if (userId === data.currentUser?.id) return 'You';
+		const participant = (data.participants ?? []).find((p) => p.user === userId);
+		if (participant?.expand?.user) {
+			return participant.expand.user.name || participant.expand.user.email || 'Player';
+		}
+		return 'Player';
+	}
 
 	// Debug logging
 	$effect(() => {
@@ -154,7 +164,7 @@
 									<div class="flex items-start justify-between mb-2">
 										<div>
 											<h4 class="font-semibold text-black">
-												{fantasyTournament.name || 'Tournament'}
+												{fantasyTournament.title || 'Tournament'}
 											</h4>
 											<p class="text-sm text-gray-600">
 												{fantasyTournament.draft_order?.length || 0} participants
@@ -168,13 +178,24 @@
 										<div class="mt-3 pt-3 border-t border-gray-200">
 											<p class="text-xs text-gray-600 mb-2">Draft Order:</p>
 											<div class="flex flex-wrap gap-2">
-												{#each fantasyTournament.draft_order as userId, index}
+												{#each fantasyTournament.draft_order as oderId, index}
 													<span class="px-2 py-1 bg-[#2F91F6] text-white text-xs font-semibold rounded">
-														{index + 1}. {userId === data.currentUser?.id ? 'You' : 'Player'}
+														{index + 1}. {getUserName(oderId)}
 													</span>
 												{/each}
 											</div>
 										</div>
+										{#if data.nextTournament}
+											<div class="mt-4">
+												<a
+													href="/fantasyleagues/{data.nextTournament.id}/draft"
+													class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+												>
+													<ArrowRight class="h-4 w-4" />
+													Go to Draft
+												</a>
+											</div>
+										{/if}
 									{/if}
 								</div>
 							{/each}
@@ -194,7 +215,7 @@
 							Need {data.league.settings?.min_participants || 6} participants to generate tournaments
 						</p>
 						<p class="text-sm text-gray-500 mb-4">
-							Current: {data.participants.length} / {data.league.settings?.min_participants || 6}
+							Current: {data.participants?.length ?? 0} / {data.league.settings?.min_participants || 6}
 						</p>
 						
 						{#if data.upcomingTournaments && data.upcomingTournaments.length > 0}
@@ -226,7 +247,7 @@
 			{/if}
 
 			<!-- Pending Requests (Owner Only) -->
-			{#if data.isOwner && data.pendingRequests.length > 0}
+			{#if data.isOwner && data.pendingRequests?.length > 0}
 				<Card.Root class="border-2 border-yellow-200 bg-white shadow-xl">
 					<Card.Header>
 						<Card.Title class="text-black flex items-center gap-2">
@@ -361,7 +382,7 @@
 						<div>
 							<p class="text-sm text-gray-600">Min Participants</p>
 							<p class="font-semibold text-black">
-								{data.participants.length} / {data.league.settings.min_participants}
+								{data.participants?.length ?? 0} / {data.league.settings?.min_participants ?? 6}
 							</p>
 						</div>
 						<div>
@@ -381,7 +402,7 @@
 							</span>
 						{:else}
 							<span class="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-semibold rounded">
-								Filling ({data.participants.length}/{data.league.settings?.min_participants || 6})
+								Filling ({data.participants?.length ?? 0}/{data.league.settings?.min_participants || 6})
 							</span>
 						{/if}
 					</div>
@@ -395,10 +416,23 @@
 						<Card.Title class="text-black">Owner Actions</Card.Title>
 					</Card.Header>
 					<Card.Content class="space-y-3">
-						<Button class="w-full bg-black hover:bg-gray-800 text-white" disabled>
-							Start Draft
-							<span class="text-xs ml-2">(Coming Soon)</span>
-						</Button>
+						{#if data.nextTournament}
+							<a href="/fantasyleagues/{data.nextTournament.id}/draft">
+								<Button class="w-full bg-green-600 hover:bg-green-700 text-white">
+									Go to Draft
+								</Button>
+							</a>
+						{:else if (data.participants?.length ?? 0) >= 6}
+							<form method="POST" action="?/generateTournaments" use:enhance>
+								<Button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white">
+									Generate Tournaments
+								</Button>
+							</form>
+						{:else}
+							<Button class="w-full bg-gray-400 text-white" disabled>
+								Need {6 - (data.participants?.length ?? 0)} more participants
+							</Button>
+						{/if}
 						<Button variant="outline" class="w-full" disabled>
 							League Settings
 							<span class="text-xs ml-2">(Coming Soon)</span>

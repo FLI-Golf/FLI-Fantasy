@@ -69,8 +69,21 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			}
 		}
 
-		// Get fantasy tournaments from expanded data
-		const fantasyTournaments = leagueRecord.expand?.fantasy_tournaments || [];
+		// Get fantasy tournaments directly from fantasy_tournament collection
+		const fantasyTournaments = await pb.collection('fantasy_tournament').getFullList({
+			filter: `fantasy_league = "${leagueId}"`,
+			sort: 'created'
+		});
+		
+		console.log('📋 Fantasy tournaments for league:', leagueId);
+		console.log('📋 Found tournaments:', fantasyTournaments.length);
+		fantasyTournaments.forEach(t => {
+			console.log(`  - ${t.id}: status="${t.status}", title="${t.title}", fantasy_league="${t.fantasy_league}"`);
+		});
+		
+		// Find the "next" tournament for the draft link
+		const nextTournament = fantasyTournaments.find(t => t.status === 'next') || fantasyTournaments[0];
+		console.log('📋 Next tournament:', nextTournament?.id, 'status:', nextTournament?.status, 'title:', nextTournament?.title);
 		
 		// For each fantasy tournament, we need to get the actual tournament details
 		// Since fantasy_tournament doesn't have a direct tournament relation,
@@ -106,6 +119,7 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 			currentUser: pb.authStore.model,
 			tournaments: tournamentsData,
 			fantasyTournaments,
+			nextTournament, // The tournament with status="next" for draft link
 			upcomingTournaments // Preview of what will be generated
 		};
 	} catch (error) {
@@ -184,6 +198,63 @@ export const actions: Actions = {
 			console.log('✅ Calling approveParticipant...');
 			await leagueService.approveParticipant(params.id, participantId);
 			console.log('✅ Participant approved successfully');
+			
+			// Check if we now have 6 approved participants - auto-generate tournaments
+			const participants = await leagueService.getLeagueParticipants(params.id);
+			const approvedCount = participants.filter(p => p.status === 'approved').length;
+			console.log(`📊 Approved participants: ${approvedCount}/6`);
+			
+			if (approvedCount === 6) {
+				console.log('🎯 We have 6 approved participants!');
+				
+				// Check if tournaments already exist
+				const existingTournaments = await pb.collection('fantasy_tournament').getFullList({
+					filter: `fantasy_league = "${params.id}"`
+				});
+				console.log(`📋 Existing fantasy tournaments: ${existingTournaments.length}`);
+				
+				if (existingTournaments.length === 0) {
+					console.log('🎯 No existing tournaments - auto-generating...');
+					try {
+						const tournaments = await leagueService.generateFantasyTournaments(params.id);
+						console.log(`✅ Generated ${tournaments.length} fantasy tournaments`);
+						tournaments.forEach((t, i) => {
+							console.log(`  ${i + 1}. ${t.title} (status: ${t.status})`);
+						});
+						
+						// Create fantasy_team records for each participant in each tournament
+						const approvedParticipants = participants.filter(p => p.status === 'approved');
+						console.log(`🎯 Creating fantasy_team records for ${approvedParticipants.length} participants...`);
+						
+						for (const tournament of tournaments) {
+							for (const participant of approvedParticipants) {
+								await pb.collection('fantasy_team').create({
+									fantasy_tournament: tournament.id,
+									user: participant.user,
+									golfers: [],
+									total_score: 0
+								});
+							}
+							console.log(`  ✅ Created ${approvedParticipants.length} teams for ${tournament.title}`);
+						}
+						
+						return { success: true, action: 'approved_and_tournaments_generated', tournamentsGenerated: tournaments.length };
+					} catch (genError: any) {
+						console.error('❌ Error generating tournaments:', genError.message);
+						console.error('Stack:', genError.stack);
+						// Still return success for approval, but note the generation failed
+						return { success: true, action: 'approved', generationError: genError.message };
+					}
+				} else {
+					console.log(`ℹ️ Tournaments already exist (${existingTournaments.length}), skipping generation`);
+					existingTournaments.forEach((t, i) => {
+						console.log(`  ${i + 1}. ${t.title}`);
+					});
+				}
+			} else {
+				console.log(`ℹ️ Only ${approvedCount} approved, need 6 to generate tournaments`);
+			}
+			
 			return { success: true, action: 'approved' };
 		} catch (error: any) {
 			console.error('❌ Error approving participant:', error);
@@ -260,6 +331,38 @@ export const actions: Actions = {
 			// Return more specific error message
 			const errorMessage = error.data?.message || error.message || 'Failed to request to join league';
 			return fail(500, { error: errorMessage });
+		}
+	},
+
+	generateTournaments: async ({ cookies, params }) => {
+		const pb = createServerPocketBase();
+		const allCookies = cookies.getAll();
+		const cookieString = allCookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+		pb.authStore.loadFromCookie(cookieString);
+
+		if (!pb.authStore.isValid) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const userId = pb.authStore.model?.id;
+
+		try {
+			const leagueService = new FantasyLeagueService(pb);
+			const isOwner = await leagueService.isLeagueOwner(params.id, userId);
+
+			if (!isOwner) {
+				return fail(403, { error: 'Only league owner can generate tournaments' });
+			}
+
+			console.log('🎯 MANUAL TOURNAMENT GENERATION TRIGGERED');
+			const tournaments = await leagueService.generateFantasyTournaments(params.id);
+			console.log(`✅ Generated ${tournaments.length} fantasy tournaments`);
+			
+			return { success: true, action: 'tournaments_generated', count: tournaments.length };
+		} catch (error: any) {
+			console.error('❌ Error generating tournaments:', error);
+			return fail(500, { error: `Failed to generate tournaments: ${error.message}` });
 		}
 	}
 };
