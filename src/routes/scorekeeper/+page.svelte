@@ -17,6 +17,7 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Minus from '@lucide/svelte/icons/minus';
+	import Check from '@lucide/svelte/icons/check';
 
 	let loading = $state(true);
 	let saving = $state(false);
@@ -25,6 +26,7 @@
 	let selectedTournament = $state<any>(null);
 	let selectedGroup = $state<any>(null);
 	let groups = $state<any[]>([]);
+	let groupStatuses = $state<Record<string, { holesScored: number, totalHoles: number, isComplete: boolean }>>({});
 	let course = $state<any>(null);
 	let holes = $state<any[]>([]);
 	let golfers = $state<any[]>([]);
@@ -92,11 +94,79 @@
 				}
 			}
 
+			// Load scoring status for all groups
+			await loadGroupStatuses();
+
 		} catch (err: any) {
 			console.error('Error loading tournament details:', err);
 			error = err.message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadGroupStatuses() {
+		if (!selectedTournament || groups.length === 0 || holes.length === 0) return;
+		
+		try {
+			// Get all golfer IDs from all groups
+			const allGolferIds: string[] = [];
+			const groupGolferMap: Record<string, string[]> = {};
+			
+			for (const group of groups) {
+				const golferIds: string[] = [];
+				if (group.expand?.team_a?.expand?.male_golfer) {
+					golferIds.push(group.expand.team_a.expand.male_golfer.id);
+				}
+				if (group.expand?.team_a?.expand?.female_golfer) {
+					golferIds.push(group.expand.team_a.expand.female_golfer.id);
+				}
+				if (group.expand?.team_b?.expand?.male_golfer) {
+					golferIds.push(group.expand.team_b.expand.male_golfer.id);
+				}
+				if (group.expand?.team_b?.expand?.female_golfer) {
+					golferIds.push(group.expand.team_b.expand.female_golfer.id);
+				}
+				groupGolferMap[group.id] = golferIds;
+				allGolferIds.push(...golferIds);
+			}
+			
+			if (allGolferIds.length === 0) return;
+			
+			// Load all scores for this tournament
+			const scores = await pb.collection('golfer_scores').getFullList({
+				filter: `tournament = "${selectedTournament.id}" && (${allGolferIds.map(id => `golfer = "${id}"`).join(' || ')})`
+			});
+			
+			// Create a map of golfer ID to their score record
+			const scoreMap = new Map(scores.map(s => [s.golfer, s]));
+			
+			// Calculate status for each group
+			const statuses: Record<string, { holesScored: number, totalHoles: number, isComplete: boolean }> = {};
+			
+			for (const group of groups) {
+				const golferIds = groupGolferMap[group.id] || [];
+				let maxHolesScored = 0;
+				
+				for (const golferId of golferIds) {
+					const score = scoreMap.get(golferId);
+					if (score?.current_hole) {
+						maxHolesScored = Math.max(maxHolesScored, score.current_hole);
+					}
+				}
+				
+				statuses[group.id] = {
+					holesScored: maxHolesScored,
+					totalHoles: holes.length,
+					isComplete: maxHolesScored >= holes.length
+				};
+			}
+			
+			groupStatuses = statuses;
+			console.log('📊 Group statuses loaded:', groupStatuses);
+			
+		} catch (err: any) {
+			console.error('Error loading group statuses:', err);
 		}
 	}
 
@@ -171,12 +241,103 @@
 				filter: `tournament = "${selectedTournament.id}" && (${golferIds.map(id => `golfer = "${id}"`).join(' || ')})`
 			});
 			
-			// Store record IDs for updates
-			existingScores.forEach(score => {
-				golferScoreRecords[score.golfer] = score.id;
-			});
+			console.log(`📊 Loading ${existingScores.length} existing scores from database`);
 			
-			console.log(`📊 Loaded ${existingScores.length} existing scores from database`);
+			// Store record IDs and restore hole scores
+			const scoresToMigrate: Array<{scoreId: string, golferId: string, reconstructedHoleScores: Record<string, number>}> = [];
+			
+			for (const score of existingScores) {
+				golferScoreRecords[score.golfer] = score.id;
+				
+				console.log(`📊 Score record for golfer ${score.golfer}:`, {
+					id: score.id,
+					score: score.score,
+					current_hole: score.current_hole,
+					hole_scores: score.hole_scores,
+					hole_scores_type: typeof score.hole_scores
+				});
+				
+				// Parse hole_scores if it's a string
+				let parsedHoleScores = score.hole_scores;
+				if (typeof parsedHoleScores === 'string') {
+					try {
+						parsedHoleScores = JSON.parse(parsedHoleScores);
+					} catch (e) {
+						console.error('Failed to parse hole_scores:', e);
+						parsedHoleScores = null;
+					}
+				}
+				
+				// Restore hole-by-hole scores if available
+				if (parsedHoleScores && typeof parsedHoleScores === 'object' && Object.keys(parsedHoleScores).length > 0) {
+					if (!holeScores[score.golfer]) {
+						holeScores[score.golfer] = {};
+					}
+					
+					// Merge saved hole scores
+					Object.entries(parsedHoleScores).forEach(([holeId, holeScore]) => {
+						holeScores[score.golfer][holeId] = holeScore as number;
+						scoredHoles.add(holeId);
+						console.log(`  📊 Restored hole ${holeId} = ${holeScore} for golfer ${score.golfer}`);
+					});
+				}
+				// If we have current_hole but no hole_scores, reconstruct from total score
+				else if (score.current_hole && score.current_hole > 0) {
+					console.log(`📊 No hole_scores found, reconstructing from total score: ${score.score} over ${score.current_hole} holes`);
+					
+					if (!holeScores[score.golfer]) {
+						holeScores[score.golfer] = {};
+					}
+					
+					const totalScore = score.score || 0;
+					const numHoles = Math.min(score.current_hole, holes.length);
+					
+					// Distribute the score across holes
+					// Put the remainder on the last scored hole to maintain the total
+					const baseScore = Math.floor(totalScore / numHoles);
+					const remainder = totalScore - (baseScore * numHoles);
+					
+					const reconstructedHoleScores: Record<string, number> = {};
+					
+					for (let i = 0; i < numHoles; i++) {
+						if (holes[i]) {
+							const holeId = holes[i].id;
+							// Put remainder on the last hole
+							const holeScore = (i === numHoles - 1) ? baseScore + remainder : baseScore;
+							holeScores[score.golfer][holeId] = holeScore;
+							scoredHoles.add(holeId);
+							reconstructedHoleScores[holeId] = holeScore;
+							console.log(`  📊 Reconstructed hole ${i + 1} (${holeId}) = ${holeScore}`);
+						}
+					}
+					
+					// Queue for migration
+					scoresToMigrate.push({
+						scoreId: score.id,
+						golferId: score.golfer,
+						reconstructedHoleScores
+					});
+				}
+			}
+			
+			// Migrate scores that need hole_scores populated
+			for (const migration of scoresToMigrate) {
+				try {
+					await pb.collection('golfer_scores').update(migration.scoreId, {
+						hole_scores: migration.reconstructedHoleScores
+					});
+					console.log(`  ✅ Saved reconstructed hole_scores to database for golfer ${migration.golferId}`);
+				} catch (updateErr: any) {
+					console.error(`  ❌ Failed to save reconstructed hole_scores:`, updateErr.message);
+				}
+			}
+			
+			// Trigger reactivity
+			holeScores = { ...holeScores };
+			scoredHoles = new Set(scoredHoles);
+			
+			console.log(`📊 Final holeScores state:`, JSON.stringify(holeScores));
+			console.log(`📊 Scored holes:`, Array.from(scoredHoles));
 			
 		} catch (err: any) {
 			console.error('Error loading existing scores:', err);
@@ -248,12 +409,21 @@
 				const totalScore = getTotalScore(golfer.id);
 				const totalStrokes = calculateTotalStrokes(golfer.id);
 				
+				// Build hole_scores object with only scored holes
+				const golferHoleScores: Record<string, number> = {};
+				scoredHoles.forEach(holeId => {
+					if (holeScores[golfer.id]?.[holeId] !== undefined) {
+						golferHoleScores[holeId] = holeScores[golfer.id][holeId];
+					}
+				});
+				
 				const scoreData = {
 					golfer: golfer.id,
 					tournament: selectedTournament.id,
 					score: totalScore,
 					total_strokes: totalStrokes,
 					current_hole: currentHoleIndex + 1, // Convert 0-based index to 1-based hole number
+					hole_scores: golferHoleScores, // Save individual hole scores
 					title: `${selectedTournament.name} - ${golfer.name}`
 				};
 				
@@ -513,7 +683,13 @@
 				</div>
 			{:else}
 				{#each groups as group}
-					<div class="bg-white rounded-xl p-6 shadow-lg">
+					{@const status = groupStatuses[group.id]}
+					{@const holesScored = status?.holesScored || 0}
+					{@const totalHoles = status?.totalHoles || holes.length}
+					{@const isComplete = status?.isComplete || false}
+					{@const isInProgress = holesScored > 0 && !isComplete}
+					{@const progressPercent = totalHoles > 0 ? (holesScored / totalHoles) * 100 : 0}
+					<div class="bg-white rounded-xl p-6 shadow-lg {isComplete ? 'border-2 border-green-500' : isInProgress ? 'border-2 border-yellow-400' : ''}">
 						<div class="flex items-center justify-between">
 							<div class="flex-1">
 								<div class="flex items-center gap-3 mb-2">
@@ -521,6 +697,21 @@
 										#{group.order}
 									</span>
 									<h3 class="text-xl font-bold text-gray-900">{group.title}</h3>
+									<!-- Status Badge -->
+									{#if isComplete}
+										<span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-bold rounded-full flex items-center gap-1">
+											<Check class="h-3 w-3" />
+											Complete
+										</span>
+									{:else if isInProgress}
+										<span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-bold rounded-full">
+											{holesScored}/{totalHoles} Holes
+										</span>
+									{:else}
+										<span class="px-3 py-1 bg-gray-100 text-gray-600 text-sm font-bold rounded-full">
+											Not Started
+										</span>
+									{/if}
 								</div>
 								<div class="grid grid-cols-2 gap-4 text-sm text-gray-600 mt-3">
 									{#if group.expand?.team_a}
@@ -543,9 +734,20 @@
 										<span class="font-semibold">Start Time:</span> {calculateGroupStartTime(group)}
 									</div>
 								</div>
+								<!-- Progress Bar -->
+								{#if holesScored > 0}
+									<div class="mt-3">
+										<div class="w-full bg-gray-200 rounded-full h-2">
+											<div 
+												class="h-2 rounded-full transition-all duration-300 {isComplete ? 'bg-green-500' : 'bg-yellow-500'}"
+												style="width: {progressPercent}%"
+											></div>
+										</div>
+									</div>
+								{/if}
 							</div>
-							<Button onclick={() => selectGroup(group)} class="bg-green-600 hover:bg-green-700 text-white">
-								Score This Group
+							<Button onclick={() => selectGroup(group)} class="{isComplete ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'} text-white">
+								{isComplete ? 'View Scores' : isInProgress ? 'Continue Scoring' : 'Score This Group'}
 							</Button>
 						</div>
 					</div>
@@ -689,10 +891,15 @@
 			</div>
 
 			<!-- Golfer Scores for Current Hole -->
-			<div class="bg-white rounded-xl p-6 shadow-lg mb-6">
+			<div class="bg-white rounded-xl p-6 shadow-lg mb-6 {isHoleScored(currentHole.id) ? 'border-2 border-yellow-400' : ''}">
 				<h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
 					<Users class="h-5 w-5" />
 					Scores for Hole {currentHole.hole_number}
+					{#if isHoleScored(currentHole.id)}
+						<span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+							Editing
+						</span>
+					{/if}
 				</h3>
 
 				<div class="space-y-6">
@@ -765,23 +972,37 @@
 				</Button>
 
 				<div class="flex gap-2">
-					<Button
-						onclick={saveCurrentHole}
-						disabled={saving || isCurrentHoleSaved()}
-						class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
-					>
-						{#if isCurrentHoleSaved()}
-							<span class="flex items-center gap-2">
-								✓ Saved
-							</span>
-						{:else if saving}
-							<span class="animate-spin">⏳</span>
-							Saving...
-						{:else}
-							<Save class="h-4 w-4" />
-							Save Hole
-						{/if}
-					</Button>
+					{#if isCurrentHoleSaved()}
+						<!-- Update button for already saved holes -->
+						<Button
+							onclick={saveCurrentHole}
+							disabled={saving}
+							class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white"
+						>
+							{#if saving}
+								<span class="animate-spin">⏳</span>
+								Updating...
+							{:else}
+								<Save class="h-4 w-4" />
+								Update Hole
+							{/if}
+						</Button>
+					{:else}
+						<!-- Save button for new holes -->
+						<Button
+							onclick={saveCurrentHole}
+							disabled={saving}
+							class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+						>
+							{#if saving}
+								<span class="animate-spin">⏳</span>
+								Saving...
+							{:else}
+								<Save class="h-4 w-4" />
+								Save Hole
+							{/if}
+						</Button>
+					{/if}
 
 					{#if currentHoleIndex === holes.length - 1}
 						<Button

@@ -37,7 +37,7 @@ export function formatScoreToPar(score: number): string {
 /**
  * Get CSS color class based on score relative to par
  * @param score - Score relative to par
- * @returns Tailwind CSS class string
+ * @returns Tailwind CSS class string for dark backgrounds
  */
 export function getScoreColorClass(score: number): string {
 	if (score < -1) return 'text-yellow-300'; // Eagle or better
@@ -45,6 +45,19 @@ export function getScoreColorClass(score: number): string {
 	if (score === 0) return 'text-white'; // Par
 	if (score === 1) return 'text-red-200'; // Bogey
 	return 'text-red-400'; // Double bogey or worse
+}
+
+/**
+ * Get CSS color class for light backgrounds (leaderboards, cards)
+ * @param score - Score relative to par
+ * @returns Tailwind CSS class string for light backgrounds
+ */
+export function getScoreColorClassLight(score: number): string {
+	if (score < -1) return 'text-green-700 bg-green-100'; // Eagle or better
+	if (score < 0) return 'text-green-600 bg-green-50'; // Birdie
+	if (score === 0) return 'text-gray-700 bg-gray-100'; // Par
+	if (score === 1) return 'text-red-600 bg-red-50'; // Bogey
+	return 'text-red-700 bg-red-100'; // Double bogey or worse
 }
 
 /**

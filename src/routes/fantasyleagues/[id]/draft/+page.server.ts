@@ -584,7 +584,44 @@ export const actions: Actions = {
 
 			if (isDraftComplete) {
 				updateData.status = 'complete';
+				updateData.draft_status = 'completed';
 				console.log('✅ Draft complete! Updating tournament status to complete');
+				
+				// Update fantasy_team records with drafted golfers
+				console.log('📝 Syncing drafted golfers to fantasy_team records...');
+				for (const [oderId, teamComp] of Object.entries(updatedDraft.team_compositions)) {
+					try {
+						// Extract golfer IDs from the DraftGolfer objects
+						const golferIds = ((teamComp as any).fantasy_team || []).map((g: any) => 
+							typeof g === 'string' ? g : g.id
+						);
+						
+						console.log(`  📋 User ${oderId} golfers:`, golferIds);
+						
+						// Find the fantasy_team record for this user and tournament
+						const teamRecords = await pb.collection('fantasy_team').getFullList({
+							filter: `fantasy_tournament = "${tournamentId}" && user = "${oderId}"`
+						});
+						
+						if (teamRecords.length > 0) {
+							await pb.collection('fantasy_team').update(teamRecords[0].id, {
+								golfers: golferIds
+							});
+							console.log(`  ✅ Updated team for user ${oderId} with ${golferIds.length} golfers`);
+						} else {
+							// Create if doesn't exist
+							await pb.collection('fantasy_team').create({
+								fantasy_tournament: tournamentId,
+								user: oderId,
+								golfers: golferIds,
+								total_score: 0
+							});
+							console.log(`  ✅ Created team for user ${oderId} with ${golferIds.length} golfers`);
+						}
+					} catch (teamError: any) {
+						console.error(`  ❌ Error updating team for user ${oderId}:`, teamError.message);
+					}
+				}
 				
 				// Find and set the next tournament to 'next' status
 				const allTournaments = await pb.collection('fantasy_tournament').getFullList({
@@ -665,7 +702,44 @@ export const actions: Actions = {
 
 			if (isDraftComplete) {
 				updateData.status = 'complete';
+				updateData.draft_status = 'completed';
 				console.log('✅ Draft complete (auto-pick)! Updating tournament status to complete');
+				
+				// Update fantasy_team records with drafted golfers
+				console.log('📝 Syncing drafted golfers to fantasy_team records...');
+				for (const [oderId, teamComp] of Object.entries(updatedDraft.team_compositions)) {
+					try {
+						// Extract golfer IDs from the DraftGolfer objects
+						const golferIds = ((teamComp as any).fantasy_team || []).map((g: any) => 
+							typeof g === 'string' ? g : g.id
+						);
+						
+						console.log(`  📋 User ${oderId} golfers:`, golferIds);
+						
+						// Find the fantasy_team record for this user and tournament
+						const teamRecords = await pb.collection('fantasy_team').getFullList({
+							filter: `fantasy_tournament = "${tournamentId}" && user = "${oderId}"`
+						});
+						
+						if (teamRecords.length > 0) {
+							await pb.collection('fantasy_team').update(teamRecords[0].id, {
+								golfers: golferIds
+							});
+							console.log(`  ✅ Updated team for user ${oderId} with ${golferIds.length} golfers`);
+						} else {
+							// Create if doesn't exist
+							await pb.collection('fantasy_team').create({
+								fantasy_tournament: tournamentId,
+								user: oderId,
+								golfers: golferIds,
+								total_score: 0
+							});
+							console.log(`  ✅ Created team for user ${oderId} with ${golferIds.length} golfers`);
+						}
+					} catch (teamError: any) {
+						console.error(`  ❌ Error updating team for user ${oderId}:`, teamError.message);
+					}
+				}
 				
 				// Find and set the next tournament to 'next' status
 				const allTournaments = await pb.collection('fantasy_tournament').getFullList({

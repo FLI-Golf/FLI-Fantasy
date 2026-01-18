@@ -57,7 +57,12 @@
 		return `after hole ${score.current_hole}`;
 	}
 
+	// Generate unique request keys to prevent auto-cancellation
+	let requestId = 0;
+
 	async function loadScores() {
+		const currentRequestId = ++requestId;
+		
 		try {
 			loading = true;
 			error = null;
@@ -66,14 +71,15 @@
 			const records = await pb.collection('golfer_scores').getFullList<GolferScore>({
 				sort: 'score,position',
 				expand: 'golfer,tournament',
-				filter: 'is_cut = false'
+				filter: 'is_cut = false',
+				requestKey: `live_ticker_${currentRequestId}`
 			});
 
 			scores = records;
 		} catch (err: any) {
-			console.error('Error loading live scores:', err);
-			// Don't show error if collection doesn't exist yet (404) or auto-cancelled (0)
+			// Silently ignore auto-cancelled requests (status 0) and 404s
 			if (err.status !== 404 && err.status !== 0) {
+				console.error('Error loading live scores:', err);
 				error = err.message;
 			}
 		} finally {
