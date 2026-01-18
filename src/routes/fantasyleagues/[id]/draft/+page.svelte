@@ -7,6 +7,11 @@
 	import type { PageData, ActionData } from './$types';
 	import type { DraftManagement } from '$lib/draft/draftManagement';
 	import { getTimerRemaining, getAutoPick } from '$lib/draft/draftManagement';
+	import Trophy from '@lucide/svelte/icons/trophy';
+	import Crown from '@lucide/svelte/icons/crown';
+	import Users from '@lucide/svelte/icons/users';
+	import Star from '@lucide/svelte/icons/star';
+	import Check from '@lucide/svelte/icons/check';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -324,11 +329,11 @@
 								</form>
 							{/if}
 
-							{#if draftStatus !== 'completed'}
-								<form method="POST" action="?/resetDraft" use:enhance>
-									<Button type="submit" variant="destructive">Reset Draft</Button>
-								</form>
-							{/if}
+							<form method="POST" action="?/resetDraft" use:enhance>
+								<Button type="submit" variant="destructive">
+									{draftStatus === 'completed' ? 'Reset Completed Draft' : 'Reset Draft'}
+								</Button>
+							</form>
 						</div>
 					{/if}
 				</div>
@@ -402,16 +407,31 @@
 		<!-- Draft Order (horizontal layout) -->
 		<Card.Root class="mb-6">
 			<Card.Header class="pb-2">
-				<Card.Title>Draft Order</Card.Title>
+				<Card.Title class="flex items-center gap-4">
+					<span>Draft Order</span>
+					{#if draft && draftStatus === 'in_progress'}
+						<span class="text-sm font-normal text-gray-500">
+							Round {draft.current_round}/4 • Pick {draft.current_pick + 1}/6 • 
+							{draft.current_direction === 'down' ? '→ Forward' : '← Reverse'}
+						</span>
+					{/if}
+				</Card.Title>
 			</Card.Header>
 			<Card.Content>
+				{@const draftOrder = draft?.draft_order || data.draftOrder || []}
+				{@const currentRound = draft?.current_round || 1}
+				{@const currentPick = draft?.current_pick || 0}
+				{@const direction = draft?.current_direction || 'down'}
+				{@const nextPick = currentPick + 1 >= 6 ? 0 : currentPick + 1}
+				{@const nextRound = currentPick + 1 >= 6 ? currentRound + 1 : currentRound}
+				{@const nextDirection = nextRound % 2 === 1 ? 'down' : 'up'}
+				{@const nextDrafterIndex = nextDirection === 'down' ? nextPick : 5 - nextPick}
+				{@const nextDrafterId = nextRound <= 4 ? draftOrder[nextDrafterIndex] : null}
 				<div class="flex flex-wrap gap-2">
-					{#each draft?.draft_order || data.draftOrder || [] as oderId, index (oderId)}
+					{#each draftOrder as oderId, index (oderId)}
 						{@const teamComp = draft?.team_compositions?.[oderId]}
-						{@const draftOrder = draft?.draft_order || data.draftOrder || []}
-						{@const currentDrafterIndex = draftOrder.indexOf(draft?.current_drafter || '')}
 						{@const isOnClock = oderId === draft?.current_drafter && draftStatus === 'in_progress'}
-						{@const isUpNext = index === (currentDrafterIndex + 1) % draftOrder.length && draftStatus === 'in_progress'}
+						{@const isUpNext = oderId === nextDrafterId && draftStatus === 'in_progress' && !isOnClock}
 						<div
 							class="flex flex-col items-center px-3 py-2 rounded-lg text-sm
 							{isOnClock ? 'bg-green-100 border-2 border-green-500' : isUpNext ? 'bg-blue-100 border-2 border-blue-400' : 'bg-gray-100'}
@@ -514,27 +534,74 @@
 
 		<!-- Completed Draft Summary -->
 		{#if draftStatus === 'completed'}
-			<Card.Root class="mt-6">
-				<Card.Header>
-					<Card.Title>Draft Complete!</Card.Title>
-					<Card.Description>All teams have been drafted</Card.Description>
+			<Card.Root class="mt-6 border-2 border-green-200 bg-gradient-to-br from-green-50 to-white shadow-xl">
+				<Card.Header class="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
+					<div class="flex items-center gap-3">
+						<div class="p-2 bg-white/20 rounded-full">
+							<Trophy class="h-6 w-6" />
+						</div>
+						<div>
+							<Card.Title class="text-white text-xl">Draft Complete!</Card.Title>
+							<Card.Description class="text-green-100">All teams have been drafted successfully</Card.Description>
+						</div>
+					</div>
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="pt-6">
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-						{#each draft?.draft_order || [] as userId (userId)}
-							{@const teamComp = draft?.team_compositions?.[userId]}
-							<div class="border rounded p-4">
-								<h3 class="font-bold mb-2">
-									{getParticipantName(userId)}
-									{userId === currentUserId ? '(You)' : ''}
-								</h3>
-								<div class="space-y-1">
-									{#each teamComp?.fantasy_team || [] as golfer (golfer.id)}
-										<div class="text-sm flex justify-between">
-											<span>{golfer.name}</span>
-											<span class="text-gray-500">#{golfer.ranking} {golfer.gender === 'male' ? '♂' : '♀'}</span>
+						{#each draft?.draft_order || [] as oderId, teamIndex (oderId)}
+							{@const teamComp = draft?.team_compositions?.[oderId]}
+							{@const isCurrentUser = oderId === currentUserId}
+							{@const maleCount = teamComp?.male_count || 0}
+							{@const femaleCount = teamComp?.female_count || 0}
+							<div class="rounded-xl overflow-hidden shadow-lg border-2 {isCurrentUser ? 'border-[#2F91F6] ring-2 ring-[#2F91F6]/30' : 'border-gray-200'}">
+								<!-- Team Header -->
+								<div class="px-4 py-3 {isCurrentUser ? 'bg-[#2F91F6]' : 'bg-gray-800'} text-white">
+									<div class="flex items-center justify-between">
+										<div class="flex items-center gap-2">
+											{#if teamIndex === 0}
+												<Crown class="h-5 w-5 text-yellow-400" />
+											{:else}
+												<Users class="h-5 w-5 text-gray-300" />
+											{/if}
+											<h3 class="font-bold">
+												{getParticipantName(oderId)}
+												{isCurrentUser ? '(You)' : ''}
+											</h3>
+										</div>
+										<div class="flex items-center gap-1 text-xs">
+											<span class="bg-blue-500 px-2 py-0.5 rounded">{maleCount}♂</span>
+											<span class="bg-pink-500 px-2 py-0.5 rounded">{femaleCount}♀</span>
+										</div>
+									</div>
+								</div>
+								<!-- Golfers List -->
+								<div class="bg-white divide-y divide-gray-100">
+									{#each teamComp?.fantasy_team || [] as golfer, golferIndex (golfer.id)}
+										{@const isMale = golfer.gender === 'male'}
+										<div class="px-4 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors">
+											<div class="flex items-center gap-2">
+												<span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold {isMale ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}">
+													{golferIndex + 1}
+												</span>
+												<span class="font-medium text-gray-900">{golfer.name}</span>
+											</div>
+											<div class="flex items-center gap-2">
+												<span class="text-xs font-semibold px-2 py-1 rounded {golfer.ranking <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}">
+													#{golfer.ranking}
+												</span>
+												<span class="text-lg {isMale ? 'text-blue-500' : 'text-pink-500'}">
+													{isMale ? '♂' : '♀'}
+												</span>
+											</div>
 										</div>
 									{/each}
+								</div>
+								<!-- Team Footer -->
+								<div class="px-4 py-2 bg-gray-50 border-t border-gray-200">
+									<div class="flex items-center justify-between text-xs text-gray-500">
+										<span>{teamComp?.total_picks || 0} golfers drafted</span>
+										<Check class="h-4 w-4 text-green-500" />
+									</div>
 								</div>
 							</div>
 						{/each}

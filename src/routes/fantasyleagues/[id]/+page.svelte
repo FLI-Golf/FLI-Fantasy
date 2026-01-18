@@ -11,8 +11,11 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Brackets from '@lucide/svelte/icons/brackets';
 	import GitBranch from '@lucide/svelte/icons/git-branch';
+	import BarChart from '@lucide/svelte/icons/bar-chart';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import FantasyLeaderboard from '$lib/components/FantasyLeaderboard.svelte';
+	import MasterLeaderboard from '$lib/components/MasterLeaderboard.svelte';
 
 	let { data, form } = $props();
 
@@ -160,7 +163,10 @@
 					<Card.Content>
 						<div class="space-y-3">
 							{#each data.fantasyTournaments as fantasyTournament}
-								<div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+								{@const draftStatus = fantasyTournament.draft_status || 'pending'}
+								{@const isCompleted = draftStatus === 'completed' || fantasyTournament.status === 'complete'}
+								{@const isInProgress = draftStatus === 'in_progress'}
+								<div class="p-4 bg-gray-50 rounded-lg border border-gray-200 {isCompleted ? 'border-green-300 bg-green-50' : ''}">
 									<div class="flex items-start justify-between mb-2">
 										<div>
 											<h4 class="font-semibold text-black">
@@ -170,9 +176,21 @@
 												{fantasyTournament.draft_order?.length || 0} participants
 											</p>
 										</div>
-										<span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">
-											Ready
-										</span>
+										{#if isCompleted}
+											<span class="px-2 py-1 bg-green-600 text-white text-xs font-semibold rounded flex items-center gap-1">
+												<Check class="h-3 w-3" />
+												Draft Complete
+											</span>
+										{:else if isInProgress}
+											<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded flex items-center gap-1">
+												<Clock class="h-3 w-3" />
+												Drafting
+											</span>
+										{:else}
+											<span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+												Ready to Draft
+											</span>
+										{/if}
 									</div>
 									{#if fantasyTournament.draft_order}
 										<div class="mt-3 pt-3 border-t border-gray-200">
@@ -185,17 +203,25 @@
 												{/each}
 											</div>
 										</div>
-										{#if data.nextTournament}
-											<div class="mt-4">
+										<div class="mt-4 flex gap-2">
+											{#if !isCompleted}
 												<a
-													href="/fantasyleagues/{data.nextTournament.id}/draft"
+													href="/fantasyleagues/{fantasyTournament.id}/draft"
 													class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
 												>
 													<ArrowRight class="h-4 w-4" />
-													Go to Draft
+													{isInProgress ? 'Continue Draft' : 'Go to Draft'}
 												</a>
-											</div>
-										{/if}
+											{:else if data.isOwner}
+												<a
+													href="/fantasyleagues/{fantasyTournament.id}/draft"
+													class="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
+												>
+													<ArrowRight class="h-4 w-4" />
+													View Draft Results
+												</a>
+											{/if}
+										</div>
 									{/if}
 								</div>
 							{/each}
@@ -245,6 +271,52 @@
 					</Card.Content>
 				</Card.Root>
 			{/if}
+
+			<!-- Live Leaderboards Section -->
+			<div class="space-y-4">
+				<Card.Root class="border-2 border-white bg-white shadow-xl">
+					<Card.Header>
+						<Card.Title class="text-black flex items-center gap-2">
+							<BarChart class="h-5 w-5" />
+							Live Leaderboards
+						</Card.Title>
+						<Card.Description>Real-time fantasy and tournament scores</Card.Description>
+					</Card.Header>
+					<Card.Content>
+						{#if data.fantasyTournaments && data.fantasyTournaments.length > 0}
+							<!-- Fantasy Leaderboard Ticker -->
+							<div class="mb-4 -mx-6">
+								<FantasyLeaderboard 
+									fantasyLeagueId={data.league.id}
+									showTicker={true}
+								/>
+							</div>
+							
+							<!-- Leaderboards Grid -->
+							<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+								<!-- Fantasy Standings -->
+								<FantasyLeaderboard 
+									fantasyLeagueId={data.league.id}
+									compact={false}
+								/>
+								
+								<!-- Tournament Leaderboard -->
+								<MasterLeaderboard 
+									limit={10}
+								/>
+							</div>
+						{:else}
+							<div class="text-center py-8">
+								<BarChart class="h-12 w-12 mx-auto mb-3 text-gray-300" />
+								<p class="text-gray-600">Leaderboards will appear once tournaments are generated</p>
+								<p class="text-sm text-gray-500 mt-1">
+									Need {data.league.settings?.min_participants || 6} approved participants to start
+								</p>
+							</div>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			</div>
 
 			<!-- Pending Requests (Owner Only) -->
 			{#if data.isOwner && data.pendingRequests?.length > 0}

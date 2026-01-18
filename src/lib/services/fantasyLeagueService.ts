@@ -665,6 +665,43 @@ export class FantasyLeagueService {
 					console.error('Error fetching golfers:', error);
 				}
 
+				// Create fantasy settings for draft (must be defined before draftManagement)
+				const rounds = 4;
+				const fantasySettings = {
+					// Auto-draft settings
+					auto_draft_delay_seconds: 1,
+					auto_draft_enabled: true,
+					
+					// Timer settings
+					pick_duration_options: [7, 15, 30, 45],
+					pick_duration_seconds: 7,
+					
+					// Draft state
+					paused: true,
+					start_pause: false,
+					completed: false,
+					
+					// Rounds
+					rounds: rounds,
+					rounds_array: Array.from({ length: rounds }, (_, i) => i + 1),
+					
+					// Team composition rules
+					team_size: 4,
+					min_male_golfers: 2,
+					min_female_golfers: 2,
+					
+					// Draft type
+					draft_type: 'snake',
+					
+					// Participants
+					participants_required: 6,
+					
+					// Timestamps
+					started_at: null,
+					completed_at: null,
+					paused_at: null
+				};
+
 				// Create draft management object with available golfers
 				const draftManagement = {
 					// Status
@@ -720,43 +757,6 @@ export class FantasyLeagueService {
 					
 					// Error tracking
 					last_error: null
-				};
-
-				// Create fantasy settings for draft
-				const rounds = 4;
-				const fantasySettings = {
-					// Auto-draft settings
-					auto_draft_delay_seconds: 1,
-					auto_draft_enabled: true,
-					
-					// Timer settings
-					pick_duration_options: [7, 15, 30, 45],
-					pick_duration_seconds: 7,
-					
-					// Draft state
-					paused: true,
-					start_pause: false,
-					completed: false,
-					
-					// Rounds
-					rounds: rounds,
-					rounds_array: Array.from({ length: rounds }, (_, i) => i + 1),
-					
-					// Team composition rules
-					team_size: 4,
-					min_male_golfers: 2,
-					min_female_golfers: 2,
-					
-					// Draft type
-					draft_type: 'snake',
-					
-					// Participants
-					participants_required: 6,
-					
-					// Timestamps
-					started_at: null,
-					completed_at: null,
-					paused_at: null
 				};
 
 				const payload: any = {
