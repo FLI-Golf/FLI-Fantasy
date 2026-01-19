@@ -7,7 +7,7 @@
 	import { browser } from '$app/environment';
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import RegisterModal from '$lib/components/RegisterModal.svelte';
-	import LiveScoreTicker from '$lib/components/LiveScoreTicker.svelte';
+	import LiveTicker from '$lib/components/LiveTicker.svelte';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
@@ -167,8 +167,8 @@
 		</div>
 	</header>
 
-	<!-- Live Score Ticker -->
-	<LiveScoreTicker />
+	<!-- Live Ticker -->
+	<LiveTicker />
 
 	<!-- Main Content -->
 	<main class="container mx-auto px-4 py-8 flex-grow">

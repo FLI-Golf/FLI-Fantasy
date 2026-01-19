@@ -19,6 +19,9 @@
 
 	let { data, form } = $props();
 
+	// Tab state for standings
+	let standingsTab: 'season' | 'tournament' = $state('season');
+
 	const approvedParticipants = $derived(
 		(data.participants ?? []).filter((p) => p.status === 'approved')
 	);
@@ -478,6 +481,122 @@
 							</span>
 						{/if}
 					</div>
+				</Card.Content>
+			</Card.Root>
+
+			<!-- Standings Card with Tabs -->
+			<Card.Root class="border-2 border-white bg-white shadow-xl">
+				<Card.Header class="pb-2">
+					<Card.Title class="text-black flex items-center gap-2">
+						<Trophy class="w-5 h-5 text-yellow-500" />
+						Standings
+					</Card.Title>
+				</Card.Header>
+				<Card.Content>
+					<!-- Tab Buttons -->
+					<div class="flex border-b border-gray-200 mb-4">
+						<button
+							type="button"
+							class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {standingsTab === 'season' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+							onclick={() => standingsTab = 'season'}
+						>
+							Season
+						</button>
+						<button
+							type="button"
+							class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {standingsTab === 'tournament' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+							onclick={() => standingsTab = 'tournament'}
+						>
+							Tournament
+						</button>
+					</div>
+
+					{#if standingsTab === 'season'}
+						<!-- Season Standings -->
+						{#if approvedParticipants.length > 0}
+							<div class="space-y-2">
+								{#each approvedParticipants.sort((a, b) => (b.total_points || 0) - (a.total_points || 0)) as participant, index}
+									{@const isCurrentUser = participant.user === data.currentUser?.id}
+									{@const rank = index + 1}
+									<div class="flex items-center justify-between py-2 px-3 rounded-lg {isCurrentUser ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}">
+										<div class="flex items-center gap-3">
+											<span class="w-6 h-6 flex items-center justify-center rounded-full text-sm font-bold
+												{rank === 1 ? 'bg-yellow-400 text-yellow-900' : 
+												 rank === 2 ? 'bg-gray-300 text-gray-700' : 
+												 rank === 3 ? 'bg-amber-600 text-white' : 
+												 'bg-gray-200 text-gray-600'}">
+												{rank}
+											</span>
+											<div class="flex items-center gap-1">
+												{#if participant.is_owner}
+													<Crown class="w-4 h-4 text-yellow-500" />
+												{/if}
+												<span class="font-medium text-gray-900 {isCurrentUser ? 'text-blue-700' : ''}">
+													{#if participant.expand?.user}
+														{participant.expand.user.name || participant.expand.user.email?.split('@')[0] || 'Player'}
+													{:else}
+														Player {index + 1}
+													{/if}
+													{#if isCurrentUser}
+														<span class="text-xs text-blue-500">(You)</span>
+													{/if}
+												</span>
+											</div>
+										</div>
+										<span class="font-bold text-lg {(participant.total_points || 0) > 0 ? 'text-green-600' : 'text-gray-400'}">
+											{participant.total_points || 0}
+										</span>
+									</div>
+								{/each}
+							</div>
+							<p class="text-xs text-gray-400 mt-3 text-center">Points accumulated across all tournaments</p>
+						{:else}
+							<p class="text-gray-500 text-sm text-center py-4">No participants yet</p>
+						{/if}
+					{:else}
+						<!-- Tournament Standings -->
+						{#if data.fantasyTournaments && data.fantasyTournaments.length > 0}
+							<div class="space-y-3">
+								{#each data.fantasyTournaments as tournament}
+									<div class="border border-gray-200 rounded-lg p-3">
+										<h4 class="font-semibold text-gray-800 text-sm mb-2">{tournament.title || 'Tournament'}</h4>
+										{#if tournament.expand?.fantasy_teams && tournament.expand.fantasy_teams.length > 0}
+											<div class="space-y-1">
+												{#each tournament.expand.fantasy_teams.sort((a, b) => (a.total_score || 0) - (b.total_score || 0)) as team, index}
+													{@const isCurrentUser = team.user === data.currentUser?.id}
+													<div class="flex items-center justify-between py-1 px-2 rounded text-sm {isCurrentUser ? 'bg-blue-50' : ''}">
+														<div class="flex items-center gap-2">
+															<span class="w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold
+																{index === 0 ? 'bg-yellow-400 text-yellow-900' : 
+																 index === 1 ? 'bg-gray-300 text-gray-700' : 
+																 index === 2 ? 'bg-amber-600 text-white' : 
+																 'bg-gray-200 text-gray-600'}">
+																{index + 1}
+															</span>
+															<span class="text-gray-700 {isCurrentUser ? 'font-medium text-blue-700' : ''}">
+																{#if team.expand?.user}
+																	{team.expand.user.name || team.expand.user.email?.split('@')[0] || 'Player'}
+																{:else}
+																	Player
+																{/if}
+															</span>
+														</div>
+														<span class="font-semibold {(team.total_score || 0) < 0 ? 'text-green-600' : (team.total_score || 0) > 0 ? 'text-red-500' : 'text-gray-600'}">
+															{team.total_score === 0 ? 'E' : team.total_score > 0 ? `+${team.total_score}` : team.total_score}
+														</span>
+													</div>
+												{/each}
+											</div>
+										{:else}
+											<p class="text-gray-400 text-xs">No teams yet</p>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-gray-500 text-sm text-center py-4">No tournaments yet</p>
+						{/if}
+					{/if}
 				</Card.Content>
 			</Card.Root>
 

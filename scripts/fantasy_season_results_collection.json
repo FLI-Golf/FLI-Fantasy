@@ -1,0 +1,221 @@
+[
+    {
+        "name": "fantasy_season_results",
+        "type": "base",
+        "listRule": "",
+        "viewRule": "",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\"",
+        "deleteRule": "@request.auth.id != \"\"",
+        "fields": [
+            {
+                "autogeneratePattern": "[a-z0-9]{15}",
+                "hidden": false,
+                "id": "text3208210256",
+                "max": 15,
+                "min": 15,
+                "name": "id",
+                "pattern": "^[a-z0-9]+$",
+                "presentable": false,
+                "primaryKey": true,
+                "required": true,
+                "system": true,
+                "type": "text"
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "pbc_806960330",
+                "hidden": false,
+                "id": "relation_league",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "league",
+                "presentable": false,
+                "required": true,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "hidden": false,
+                "id": "select_season",
+                "maxSelect": 1,
+                "name": "season",
+                "presentable": true,
+                "required": true,
+                "system": false,
+                "type": "select",
+                "values": [
+                    "2025",
+                    "2026",
+                    "2027",
+                    "2028"
+                ]
+            },
+            {
+                "cascadeDelete": false,
+                "collectionId": "_pb_users_auth_",
+                "hidden": false,
+                "id": "relation_user",
+                "maxSelect": 1,
+                "minSelect": 0,
+                "name": "user",
+                "presentable": false,
+                "required": true,
+                "system": false,
+                "type": "relation"
+            },
+            {
+                "hidden": false,
+                "id": "number_final_rank",
+                "max": null,
+                "min": 1,
+                "name": "final_rank",
+                "onlyInt": true,
+                "presentable": true,
+                "required": true,
+                "system": false,
+                "type": "number"
+            },
+            {
+                "hidden": false,
+                "id": "number_total_points",
+                "max": null,
+                "min": 0,
+                "name": "total_points",
+                "onlyInt": true,
+                "presentable": false,
+                "required": true,
+                "system": false,
+                "type": "number"
+            },
+            {
+                "hidden": false,
+                "id": "number_tournaments_played",
+                "max": null,
+                "min": 0,
+                "name": "tournaments_played",
+                "onlyInt": true,
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "number"
+            },
+            {
+                "hidden": false,
+                "id": "number_tournament_wins",
+                "max": null,
+                "min": 0,
+                "name": "tournament_wins",
+                "onlyInt": true,
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "number"
+            },
+            {
+                "hidden": false,
+                "id": "select_prize_type",
+                "maxSelect": 1,
+                "name": "prize_type",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "select",
+                "values": [
+                    "store_credit",
+                    "merch",
+                    "cash",
+                    "trophy",
+                    "custom"
+                ]
+            },
+            {
+                "hidden": false,
+                "id": "number_prize_value",
+                "max": null,
+                "min": 0,
+                "name": "prize_value",
+                "onlyInt": false,
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "number"
+            },
+            {
+                "autogeneratePattern": "",
+                "hidden": false,
+                "id": "text_prize_description",
+                "max": 500,
+                "min": 0,
+                "name": "prize_description",
+                "pattern": "",
+                "presentable": false,
+                "primaryKey": false,
+                "required": false,
+                "system": false,
+                "type": "text"
+            },
+            {
+                "hidden": false,
+                "id": "bool_prize_claimed",
+                "name": "prize_claimed",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "bool"
+            },
+            {
+                "hidden": false,
+                "id": "date_prize_claimed_at",
+                "max": "",
+                "min": "",
+                "name": "prize_claimed_at",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "date"
+            },
+            {
+                "autogeneratePattern": "",
+                "hidden": false,
+                "id": "text_store_credit_code",
+                "max": 50,
+                "min": 0,
+                "name": "store_credit_code",
+                "pattern": "",
+                "presentable": false,
+                "primaryKey": false,
+                "required": false,
+                "system": false,
+                "type": "text"
+            },
+            {
+                "hidden": false,
+                "id": "json_tournament_results",
+                "maxSize": 0,
+                "name": "tournament_results",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "json"
+            },
+            {
+                "hidden": false,
+                "id": "date_finalized_at",
+                "max": "",
+                "min": "",
+                "name": "finalized_at",
+                "presentable": false,
+                "required": false,
+                "system": false,
+                "type": "date"
+            }
+        ],
+        "indexes": [
+            "CREATE INDEX idx_season_league ON fantasy_season_results (season, league)",
+            "CREATE INDEX idx_user_season ON fantasy_season_results (user, season)",
+            "CREATE UNIQUE INDEX idx_unique_result ON fantasy_season_results (league, season, user)"
+        ],
+        "system": false
+    }
+]
