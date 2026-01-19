@@ -2,6 +2,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { pb } from '$lib/pocketbase';
 
+	// ============ TYPES ============
+	type TickerMode = 'live_scores' | 'ticker_items' | 'loading';
+
 	interface GolferScore {
 		id: string;
 		score: number;
@@ -44,51 +47,69 @@
 		combinedScore: number;
 	}
 
-	let scores: GolferScore[] = [];
-	let teams: Team[] = [];
+	interface Tournament {
+		id: string;
+		name: string;
+		status: string;
+		start_date: string;
+		end_date: string;
+		location?: { name?: string };
+	}
+
+	interface TickerItem {
+		id: string;
+		type: 'announcement' | 'promotion' | 'countdown' | 'fantasy' | 'custom';
+		title: string;
+		message: string;
+		link_url?: string;
+		link_text?: string;
+		icon?: string;
+		priority: number;
+		starts_at?: string;
+		expires_at?: string;
+		is_active: boolean;
+		bg_color?: string;
+		text_color?: string;
+	}
+
+	// ============ STATE ============
+	let mode: TickerMode = 'loading';
 	let teamScores: TeamScore[] = [];
+	let tickerItems: TickerItem[] = [];
+	let activeTournament: Tournament | null = null;
 	let loading = true;
 	let error: string | null = null;
-	let unsubscribe: (() => void) | null = null;
+	let unsubscribeScores: (() => void) | null = null;
+	let unsubscribeItems: (() => void) | null = null;
 	let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+	let requestId = 0;
 
-	// Format score to par display
+	// ============ SCORE HELPERS ============
 	function formatScoreToPar(score: number): string {
 		if (score === 0) return 'E';
 		return score > 0 ? `+${score}` : `${score}`;
 	}
 
-	// Get color class based on score
 	function getScoreColor(score: number): string {
-		if (score < -2) return 'text-yellow-300 font-bold text-xl'; // Eagle or better
-		if (score < 0) return 'text-yellow-200 font-bold text-xl'; // Birdie (under par)
-		if (score === 0) return 'text-white font-semibold text-lg'; // Par
-		return 'text-red-300 font-semibold text-lg'; // Bogey or worse (over par)
+		if (score < -2) return 'text-yellow-300 font-bold';
+		if (score < 0) return 'text-yellow-200 font-bold';
+		if (score === 0) return 'text-white font-semibold';
+		return 'text-red-300 font-semibold';
 	}
 
-	// Format hole status
 	function formatHoleStatus(score: GolferScore): string {
 		if (!score.current_hole) return '';
-		
-		// Assume 18 holes unless we have tournament data
 		const totalHoles = 18;
-		
-		if (score.current_hole >= totalHoles) {
-			return 'F';
-		}
-		
+		if (score.current_hole >= totalHoles) return 'F';
 		return `thru ${score.current_hole}`;
 	}
 
-	// Get team logo URL from PocketBase
 	function getTeamLogoUrl(team: Team): string {
 		if (!team.mini_logo) return '';
 		return `https://pocketbase-production-e678.up.railway.app/api/files/${team.collectionId}/${team.id}/${team.mini_logo}`;
 	}
 
-	// Group scores by team
 	function groupScoresByTeam(scores: GolferScore[], teams: Team[]): TeamScore[] {
-		// Create maps for golfer ID to team and gender
 		const golferToTeam = new Map<string, Team>();
 		const maleGolfers = new Set<string>();
 		
@@ -102,7 +123,6 @@
 			}
 		});
 
-		// Group scores by team
 		const teamScoreMap = new Map<string, TeamScore>();
 		
 		scores.forEach(score => {
@@ -129,41 +149,95 @@
 			teamScore.combinedScore += score.score;
 		});
 
-		// Sort by combined score (lowest first)
 		return Array.from(teamScoreMap.values()).sort((a, b) => a.combinedScore - b.combinedScore);
 	}
 
-	// Generate unique request keys to prevent auto-cancellation
-	let requestId = 0;
+	// ============ TICKER ITEM HELPERS ============
+	function getIconComponent(iconName: string | undefined): string {
+		// Return emoji fallbacks for common icons
+		const iconMap: Record<string, string> = {
+			'ticket': '🎟️',
+			'trophy': '🏆',
+			'users': '👥',
+			'shopping-bag': '🛍️',
+			'calendar': '📅',
+			'star': '⭐',
+			'bell': '🔔',
+			'info': 'ℹ️'
+		};
+		return iconMap[iconName || ''] || '📢';
+	}
 
-	async function loadScores() {
+	function isItemActive(item: TickerItem): boolean {
+		if (!item.is_active) return false;
+		
+		const now = new Date();
+		if (item.starts_at && new Date(item.starts_at) > now) return false;
+		if (item.expires_at && new Date(item.expires_at) < now) return false;
+		
+		return true;
+	}
+
+	// ============ DATA LOADING ============
+	async function loadData() {
 		const currentRequestId = ++requestId;
 		
 		try {
 			loading = true;
 			error = null;
 
-			// Load golfer scores with golfer and tournament expanded
-			const [scoresRecords, teamsRecords] = await Promise.all([
-				pb.collection('golfer_scores').getFullList<GolferScore>({
-					sort: 'score,position',
-					expand: 'golfer,tournament',
-					filter: 'is_cut = false',
-					requestKey: `live_ticker_scores_${currentRequestId}`
-				}),
-				pb.collection('teams').getFullList<Team>({
-					filter: 'reserves = false',
-					requestKey: `live_ticker_teams_${currentRequestId}`
-				})
-			]);
+			// Check for active tournament (in_progress status)
+			const tournaments = await pb.collection('tournaments').getFullList<Tournament>({
+				filter: 'status = "in_progress"',
+				requestKey: `ticker_tournaments_${currentRequestId}`
+			});
 
-			scores = scoresRecords;
-			teams = teamsRecords;
-			teamScores = groupScoresByTeam(scores, teams);
+			activeTournament = tournaments.length > 0 ? tournaments[0] : null;
+
+			if (activeTournament) {
+				// Load live scores
+				const [scoresRecords, teamsRecords] = await Promise.all([
+					pb.collection('golfer_scores').getFullList<GolferScore>({
+						sort: 'score,position',
+						expand: 'golfer,tournament',
+						filter: 'is_cut = false',
+						requestKey: `ticker_scores_${currentRequestId}`
+					}),
+					pb.collection('teams').getFullList<Team>({
+						filter: 'reserves = false',
+						requestKey: `ticker_teams_${currentRequestId}`
+					})
+				]);
+
+				teamScores = groupScoresByTeam(scoresRecords, teamsRecords);
+				mode = teamScores.length > 0 ? 'live_scores' : 'ticker_items';
+			} else {
+				mode = 'ticker_items';
+			}
+
+			// Always load ticker items as fallback
+			const items = await pb.collection('ticker_items').getFullList<TickerItem>({
+				sort: '-priority',
+				requestKey: `ticker_items_${currentRequestId}`
+			});
+			tickerItems = items.filter(isItemActive);
+
+			// If no live scores, ensure we have ticker items
+			if (mode === 'ticker_items' && tickerItems.length === 0) {
+				// Create a default item if none exist
+				tickerItems = [{
+					id: 'default',
+					type: 'announcement',
+					title: 'Welcome to FLI Fantasy Golf!',
+					message: 'Stay tuned for live tournament updates',
+					priority: 1,
+					is_active: true
+				}];
+			}
+
 		} catch (err: any) {
-			// Silently ignore auto-cancelled requests (status 0) and 404s
 			if (err.status !== 404 && err.status !== 0) {
-				console.error('Error loading live scores:', err);
+				console.error('Error loading ticker data:', err);
 				error = err.message;
 			}
 		} finally {
@@ -171,27 +245,35 @@
 		}
 	}
 
+	// ============ LIFECYCLE ============
 	onMount(async () => {
-		await loadScores();
+		await loadData();
 
-		// Subscribe to real-time updates (only if collection exists)
+		// Subscribe to real-time updates
 		try {
-			unsubscribe = await pb.collection('golfer_scores').subscribe('*', async (e) => {
-				// Debounce rapid updates
+			unsubscribeScores = await pb.collection('golfer_scores').subscribe('*', async () => {
 				if (loadTimeout) clearTimeout(loadTimeout);
-				loadTimeout = setTimeout(async () => {
-					await loadScores();
-				}, 500);
+				loadTimeout = setTimeout(loadData, 500);
 			});
 		} catch (err: any) {
-			// Silently fail if collection doesn't exist yet
 			if (err.status !== 404 && err.status !== 0) {
-				console.error('Error subscribing to live scores:', err);
+				console.error('Error subscribing to scores:', err);
 			}
 		}
 
-		// Refresh scores every 30 seconds as fallback
-		const interval = setInterval(loadScores, 30000);
+		try {
+			unsubscribeItems = await pb.collection('ticker_items').subscribe('*', async () => {
+				if (loadTimeout) clearTimeout(loadTimeout);
+				loadTimeout = setTimeout(loadData, 500);
+			});
+		} catch (err: any) {
+			if (err.status !== 404 && err.status !== 0) {
+				console.error('Error subscribing to ticker items:', err);
+			}
+		}
+
+		// Refresh every 30 seconds
+		const interval = setInterval(loadData, 30000);
 
 		return () => {
 			clearInterval(interval);
@@ -200,33 +282,28 @@
 	});
 
 	onDestroy(() => {
-		if (unsubscribe) {
-			unsubscribe();
-		}
+		if (unsubscribeScores) unsubscribeScores();
+		if (unsubscribeItems) unsubscribeItems();
 	});
 </script>
 
-<div class="live-score-ticker bg-gradient-to-r from-green-800 to-green-900 text-white py-4 overflow-hidden">
+<div class="live-ticker bg-gradient-to-r from-green-800 to-green-900 text-white py-4 overflow-hidden">
 	<div class="container mx-auto px-4">
-		{#if loading && teamScores.length === 0}
+		{#if loading && mode === 'loading'}
 			<div class="flex items-center justify-center">
-				<div class="animate-pulse">Loading live scores...</div>
+				<div class="animate-pulse">Loading...</div>
 			</div>
 		{:else if error}
 			<div class="text-center text-red-300">
-				<span class="text-sm">Unable to load live scores</span>
+				<span class="text-sm">Unable to load ticker</span>
 			</div>
-		{:else if teamScores.length === 0}
-			<div class="text-center text-gray-300">
-				<span class="text-sm">No live scores available</span>
-			</div>
-		{:else}
+		{:else if mode === 'live_scores' && teamScores.length > 0}
+			<!-- LIVE SCORES MODE -->
 			<div class="ticker-wrapper">
 				<div class="ticker-content">
 					{#each teamScores as teamScore}
 						<div class="ticker-item inline-block mx-4 align-top">
 							<div class="team-card bg-gray-800/90 rounded-xl shadow-lg border border-gray-700 overflow-hidden w-48">
-								<!-- Team Header with Logo -->
 								<div class="bg-black px-3 py-2 flex items-center gap-2 border-b border-gray-700">
 									{#if getTeamLogoUrl(teamScore.team)}
 										<img 
@@ -242,8 +319,6 @@
 										</div>
 									</div>
 								</div>
-								
-								<!-- Golfers List -->
 								<div class="px-2 py-2 space-y-1.5">
 									{#each teamScore.golfers as score}
 										{#if score.expand?.golfer}
@@ -273,7 +348,6 @@
 					{#each teamScores as teamScore}
 						<div class="ticker-item inline-block mx-4 align-top">
 							<div class="team-card bg-gray-800/90 rounded-xl shadow-lg border border-gray-700 overflow-hidden w-48">
-								<!-- Team Header with Logo -->
 								<div class="bg-black px-3 py-2 flex items-center gap-2 border-b border-gray-700">
 									{#if getTeamLogoUrl(teamScore.team)}
 										<img 
@@ -289,8 +363,6 @@
 										</div>
 									</div>
 								</div>
-								
-								<!-- Golfers List -->
 								<div class="px-2 py-2 space-y-1.5">
 									{#each teamScore.golfers as score}
 										{#if score.expand?.golfer}
@@ -318,6 +390,45 @@
 					{/each}
 				</div>
 			</div>
+		{:else}
+			<!-- TICKER ITEMS MODE -->
+			<div class="ticker-wrapper">
+				<div class="ticker-content-items">
+					{#each tickerItems as item}
+						<div class="ticker-item inline-flex items-center mx-8 gap-3 bg-black/30 rounded-lg px-5 py-3">
+							<span class="text-2xl">{getIconComponent(item.icon)}</span>
+							<div class="flex flex-col">
+								<span class="font-bold text-base text-white">{item.title}</span>
+								{#if item.message}
+									<span class="text-sm text-gray-300">{item.message}</span>
+								{/if}
+							</div>
+							{#if item.link_text}
+								<span class="ml-4 px-3 py-1 bg-white/20 rounded-full text-sm font-medium hover:bg-white/30 transition-colors cursor-pointer">
+									{item.link_text} →
+								</span>
+							{/if}
+						</div>
+					{/each}
+					<!-- Duplicate for seamless loop -->
+					{#each tickerItems as item}
+						<div class="ticker-item inline-flex items-center mx-8 gap-3 bg-black/30 rounded-lg px-5 py-3">
+							<span class="text-2xl">{getIconComponent(item.icon)}</span>
+							<div class="flex flex-col">
+								<span class="font-bold text-base text-white">{item.title}</span>
+								{#if item.message}
+									<span class="text-sm text-gray-300">{item.message}</span>
+								{/if}
+							</div>
+							{#if item.link_text}
+								<span class="ml-4 px-3 py-1 bg-white/20 rounded-full text-sm font-medium hover:bg-white/30 transition-colors cursor-pointer">
+									{item.link_text} →
+								</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
 		{/if}
 	</div>
 </div>
@@ -333,6 +444,11 @@
 		animation: scroll 60s linear infinite;
 	}
 
+	.ticker-content-items {
+		display: inline-block;
+		animation: scroll 40s linear infinite;
+	}
+
 	@keyframes scroll {
 		0% {
 			transform: translateX(0);
@@ -342,7 +458,8 @@
 		}
 	}
 
-	.ticker-content:hover {
+	.ticker-content:hover,
+	.ticker-content-items:hover {
 		animation-play-state: paused;
 	}
 </style>
