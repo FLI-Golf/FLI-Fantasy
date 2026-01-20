@@ -1,34 +1,61 @@
 import type { PageServerLoad } from './$types';
-import PocketBase from 'pocketbase';
+import { env } from '$env/dynamic/public';
 
-const POCKETBASE_URL = process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090';
-
-export const load: PageServerLoad = async () => {
-	const pb = new PocketBase(POCKETBASE_URL);
+export const load: PageServerLoad = async ({ fetch }) => {
+	const POCKETBASE_URL = env.VITE_POCKETBASE_URL || 'https://pocketbase-production-e678.up.railway.app';
+	
+	console.log('🛒 Shop page loading...');
+	console.log('📍 PocketBase URL:', POCKETBASE_URL);
 	
 	try {
-		// Fetch all active products with their categories
-		const products = await pb.collection('products').getList(1, 50, {
+		// Fetch products using native fetch (more reliable in SvelteKit)
+		console.log('📦 Fetching products...');
+		const productsParams = new URLSearchParams({
 			filter: 'is_active = true',
 			sort: '-is_featured,-created',
 			expand: 'category'
 		});
+		const productsRes = await fetch(
+			`${POCKETBASE_URL}/api/collections/products/records?${productsParams}`
+		);
 		
-		// Fetch all categories
-		const categories = await pb.collection('product_categories').getList(1, 50, {
+		if (!productsRes.ok) {
+			const errorText = await productsRes.text();
+			console.error('Products error response:', errorText);
+			throw new Error(`Products fetch failed: ${productsRes.status}`);
+		}
+		
+		const productsData = await productsRes.json();
+		console.log(`✅ Found ${productsData.items?.length || 0} products`);
+		
+		// Fetch categories
+		console.log('📂 Fetching categories...');
+		const categoriesParams = new URLSearchParams({
 			filter: 'is_active = true',
 			sort: 'sort_order'
 		});
+		const categoriesRes = await fetch(
+			`${POCKETBASE_URL}/api/collections/product_categories/records?${categoriesParams}`
+		);
+		
+		if (!categoriesRes.ok) {
+			throw new Error(`Categories fetch failed: ${categoriesRes.status}`);
+		}
+		
+		const categoriesData = await categoriesRes.json();
+		console.log(`✅ Found ${categoriesData.items?.length || 0} categories`);
 		
 		return {
-			products: products.items,
-			categories: categories.items
+			products: productsData.items || [],
+			categories: categoriesData.items || []
 		};
-	} catch (error) {
-		console.error('Error loading products:', error);
+	} catch (error: any) {
+		console.error('❌ Error loading products:', error.message);
+		console.error('❌ Full error:', error);
 		return {
 			products: [],
-			categories: []
+			categories: [],
+			error: error.message
 		};
 	}
 };

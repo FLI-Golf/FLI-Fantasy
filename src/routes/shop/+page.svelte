@@ -3,6 +3,7 @@
 	import ShoppingBag from '@lucide/svelte/icons/shopping-bag';
 	import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
 	import Plus from '@lucide/svelte/icons/plus';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 
@@ -10,6 +11,16 @@
 	
 	const categories = $derived(data?.categories ?? []);
 	const products = $derived(data?.products ?? []);
+	const error = $derived(data?.error ?? null);
+	
+	// Debug logging
+	$effect(() => {
+		console.log('🛒 Shop data received:', { 
+			productsCount: products.length, 
+			categoriesCount: categories.length,
+			error 
+		});
+	});
 	
 	function formatPrice(cents: number): string {
 		return `$${(cents / 100).toFixed(2)}`;
@@ -62,8 +73,23 @@
 		</div>
 	{/if}
 
+	<!-- Error Display -->
+	{#if error}
+		<Card.Root class="bg-red-50 border-red-200">
+			<Card.Content class="py-6">
+				<div class="flex items-center gap-3">
+					<AlertCircle class="h-6 w-6 text-red-500" />
+					<div>
+						<h3 class="text-lg font-semibold text-red-800">Error Loading Products</h3>
+						<p class="text-red-600">{error}</p>
+					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
 	<!-- Products Grid -->
-	{#if products.length === 0}
+	{#if products.length === 0 && !error}
 		<Card.Root class="bg-white">
 			<Card.Content class="py-12 text-center">
 				<div class="flex justify-center mb-4">
