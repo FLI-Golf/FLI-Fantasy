@@ -12,8 +12,7 @@ export const load: PageServerLoad = async ({ fetch }) => {
 		console.log('📦 Fetching products...');
 		const productsParams = new URLSearchParams({
 			filter: 'is_active = true',
-			sort: '-is_featured,-created',
-			expand: 'category'
+			sort: '-is_featured'
 		});
 		const productsRes = await fetch(
 			`${POCKETBASE_URL}/api/collections/products/records?${productsParams}`
