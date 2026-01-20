@@ -2,6 +2,7 @@
  * Checkout API Endpoint
  * 
  * Creates a Stripe Checkout Session and PocketBase order
+ * Requires authenticated user - order is linked to their account
  */
 
 import { json } from '@sveltejs/kit';
@@ -10,6 +11,8 @@ import PocketBase from 'pocketbase';
 import type { RequestHandler } from './$types';
 
 const POCKETBASE_URL = process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090';
+const ADMIN_EMAIL = process.env.POCKETBASE_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.POCKETBASE_ADMIN_PASSWORD || '';
 
 function generateOrderNumber(): string {
 	const timestamp = Date.now().toString(36);
@@ -17,12 +20,17 @@ function generateOrderNumber(): string {
 	return `FLI-${timestamp}-${random}`.toUpperCase();
 }
 
-export const POST: RequestHandler = async ({ request, url }) => {
+export const POST: RequestHandler = async ({ request, url, locals }) => {
 	try {
-		const { items, customerEmail } = await request.json();
+		const { items, customerEmail, userId } = await request.json();
 		
 		if (!items || items.length === 0) {
 			return json({ error: 'No items in cart' }, { status: 400 });
+		}
+		
+		// Require authenticated user
+		if (!userId) {
+			return json({ error: 'Authentication required' }, { status: 401 });
 		}
 		
 		// Calculate totals
@@ -33,23 +41,27 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const shippingCost = 0; // Calculate shipping if needed
 		const total = subtotal + tax + shippingCost;
 		
-		// Create order in PocketBase
+		// Create PocketBase client with admin auth for creating order items
 		const pb = new PocketBase(POCKETBASE_URL);
+		await pb.admins.authWithPassword(ADMIN_EMAIL, ADMIN_PASSWORD);
+		
 		const orderNumber = generateOrderNumber();
 		
+		// Create order linked to user
 		const order = await pb.collection('orders').create({
 			order_number: orderNumber,
-			email: customerEmail || 'guest@example.com',
+			user: userId,
+			email: customerEmail,
 			status: 'pending',
 			subtotal,
 			tax,
 			shipping_cost: shippingCost,
 			total,
 			currency: 'usd',
-			billing_email: customerEmail || 'guest@example.com'
+			billing_email: customerEmail
 		});
 		
-		// Create order items
+		// Create order items (requires admin auth)
 		for (const item of items) {
 			await pb.collection('order_items').create({
 				order: order.id,
@@ -76,7 +88,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			customerEmail: customerEmail || undefined,
 			metadata: {
 				orderId: order.id,
-				orderNumber: orderNumber
+				orderNumber: orderNumber,
+				userId: userId
 			}
 		});
 		

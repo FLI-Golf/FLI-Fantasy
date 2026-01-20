@@ -3,7 +3,8 @@ import PocketBase from 'pocketbase';
 import { env } from '$env/dynamic/public';
 
 // Routes that require authentication - redirect to home with showRegister flag
-const authRequiredRoutes = ['/shop', '/seasons', '/player', '/dashboard'];
+// Note: /shop allows anonymous browsing, auth handled client-side at checkout
+const authRequiredRoutes = ['/seasons', '/player', '/dashboard'];
 
 // Routes that require specific roles
 const roleProtectedRoutes: Record<string, string[]> = {

@@ -46,7 +46,7 @@
 
 		<!-- FLI Shop Card -->
 		<a 
-			href="#"
+			href="/shop"
 			class="group bg-white rounded-2xl p-8 shadow-xl hover:shadow-2xl transition-all transform hover:scale-105"
 		>
 			<div class="flex items-center gap-4 mb-4">

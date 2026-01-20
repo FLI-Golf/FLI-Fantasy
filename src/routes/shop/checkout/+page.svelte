@@ -1,20 +1,28 @@
 <script lang="ts">
 	import { cart } from '$lib/stores/cart';
+	import { currentUser } from '$lib/pocketbase';
 	import { redirectToCheckout } from '$lib/stripe';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Lock from '@lucide/svelte/icons/lock';
+	import LogIn from '@lucide/svelte/icons/log-in';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import LoginModal from '$lib/components/LoginModal.svelte';
+	import RegisterModal from '$lib/components/RegisterModal.svelte';
 	
-	let email = $state('');
 	let loading = $state(false);
 	let error = $state('');
+	let showLogin = $state(false);
+	let showRegister = $state(false);
 	
 	let total = $derived(cart.getTotal($cart));
+	let isAuthenticated = $derived(!!$currentUser);
+	let userEmail = $derived($currentUser?.email || '');
 	
 	onMount(() => {
 		// Redirect if cart is empty
@@ -28,8 +36,8 @@
 	}
 	
 	async function handleCheckout() {
-		if (!email) {
-			error = 'Please enter your email address';
+		if (!isAuthenticated) {
+			error = 'Please login or create an account to continue';
 			return;
 		}
 		
@@ -43,7 +51,8 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					items: $cart,
-					customerEmail: email
+					customerEmail: userEmail,
+					userId: $currentUser?.id
 				})
 			});
 			
@@ -109,26 +118,30 @@
 		</Card.Content>
 	</Card.Root>
 
-	<!-- Checkout Form -->
-	<Card.Root class="bg-white">
-		<Card.Header>
-			<h2 class="text-xl font-bold text-black">Contact Information</h2>
-		</Card.Header>
-		<Card.Content>
-			<form onsubmit={(e) => { e.preventDefault(); handleCheckout(); }} class="space-y-4">
-				<div class="space-y-2">
-					<Label for="email">Email Address</Label>
-					<Input
-						id="email"
-						type="email"
-						bind:value={email}
-						placeholder="your@email.com"
-						required
-						class="bg-white"
-					/>
-					<p class="text-sm text-gray-500">
-						We'll send your order confirmation here
-					</p>
+	<!-- Auth Required Section (when not logged in) -->
+	{#if !isAuthenticated}
+		<Card.Root class="bg-white">
+			<Card.Header>
+				<h2 class="text-xl font-bold text-black">Account Required</h2>
+				<p class="text-gray-600">Please login or create an account to complete your purchase</p>
+			</Card.Header>
+			<Card.Content class="space-y-4">
+				<div class="grid grid-cols-2 gap-4">
+					<Button 
+						onclick={() => showLogin = true}
+						variant="outline"
+						class="w-full py-6 text-lg border-2 border-[#2F91F6] text-[#2F91F6] hover:bg-[#2F91F6] hover:text-white"
+					>
+						<LogIn class="h-5 w-5 mr-2" />
+						Login
+					</Button>
+					<Button 
+						onclick={() => showRegister = true}
+						class="w-full py-6 text-lg bg-[#2F91F6] hover:bg-[#2580d6] text-white"
+					>
+						<UserPlus class="h-5 w-5 mr-2" />
+						Sign Up
+					</Button>
 				</div>
 				
 				{#if error}
@@ -136,27 +149,57 @@
 						<p class="text-sm text-red-600">{error}</p>
 					</div>
 				{/if}
-				
-				<Button 
-					type="submit"
-					disabled={loading || !email}
-					class="w-full bg-[#2F91F6] hover:bg-[#2580d6] text-white text-lg py-6"
-				>
-					{#if loading}
-						Processing...
-					{:else}
-						<Lock class="h-4 w-4 mr-2" />
-						Pay {formatPrice(total)} with Stripe
+			</Card.Content>
+		</Card.Root>
+	{:else}
+		<!-- Checkout Form (when logged in) -->
+		<Card.Root class="bg-white">
+			<Card.Header>
+				<h2 class="text-xl font-bold text-black">Contact Information</h2>
+			</Card.Header>
+			<Card.Content>
+				<form onsubmit={(e) => { e.preventDefault(); handleCheckout(); }} class="space-y-4">
+					<div class="space-y-2">
+						<Label for="email">Email Address</Label>
+						<Input
+							id="email"
+							type="email"
+							value={userEmail}
+							disabled
+							class="bg-gray-100"
+						/>
+						<p class="text-sm text-gray-500">
+							Order confirmation will be sent to your account email
+						</p>
+					</div>
+					
+					{#if error}
+						<div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+							<p class="text-sm text-red-600">{error}</p>
+						</div>
 					{/if}
-				</Button>
-				
-				<div class="flex items-center justify-center gap-2 text-sm text-gray-500">
-					<Lock class="h-4 w-4" />
-					<span>Secure checkout powered by Stripe</span>
-				</div>
-			</form>
-		</Card.Content>
-	</Card.Root>
+					
+					<Button 
+						type="submit"
+						disabled={loading}
+						class="w-full bg-[#2F91F6] hover:bg-[#2580d6] text-white text-lg py-6"
+					>
+						{#if loading}
+							Processing...
+						{:else}
+							<Lock class="h-4 w-4 mr-2" />
+							Pay {formatPrice(total)} with Stripe
+						{/if}
+					</Button>
+					
+					<div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+						<Lock class="h-4 w-4" />
+						<span>Secure checkout powered by Stripe</span>
+					</div>
+				</form>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- Test Card Info -->
 	<Card.Root class="bg-white/10 border-white/20">
@@ -170,3 +213,6 @@
 		</Card.Content>
 	</Card.Root>
 </div>
+
+<LoginModal bind:open={showLogin} />
+<RegisterModal bind:open={showRegister} />
