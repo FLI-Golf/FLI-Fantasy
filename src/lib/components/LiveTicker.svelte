@@ -77,11 +77,14 @@
 	let teamScores: TeamScore[] = [];
 	let tickerItems: TickerItem[] = [];
 	let activeTournament: Tournament | null = null;
+	let nextTournament: Tournament | null = null;
+	let countdown = { days: 0, hours: 0, minutes: 0, seconds: 0 };
 	let loading = true;
 	let error: string | null = null;
 	let unsubscribeScores: (() => void) | null = null;
 	let unsubscribeItems: (() => void) | null = null;
 	let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+	let countdownInterval: ReturnType<typeof setInterval> | null = null;
 	let requestId = 0;
 
 	// ============ SCORE HELPERS ============
@@ -178,6 +181,27 @@
 		return true;
 	}
 
+	// ============ COUNTDOWN ============
+	function updateCountdown() {
+		if (!nextTournament) return;
+		
+		const tournamentDate = new Date(nextTournament.start_date);
+		const now = new Date();
+		const diff = tournamentDate.getTime() - now.getTime();
+		
+		if (diff <= 0) {
+			countdown = { days: 0, hours: 0, minutes: 0, seconds: 0 };
+			return;
+		}
+		
+		countdown = {
+			days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+			hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+			minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+			seconds: Math.floor((diff % (1000 * 60)) / 1000)
+		};
+	}
+
 	// ============ DATA LOADING ============
 	async function loadData() {
 		const currentRequestId = ++requestId;
@@ -193,6 +217,29 @@
 			});
 
 			activeTournament = tournaments.length > 0 ? tournaments[0] : null;
+			
+			// If no active tournament, get next upcoming
+			if (!activeTournament) {
+				const upcomingTournaments = await pb.collection('tournaments').getList<Tournament>(1, 1, {
+					filter: 'status = "upcoming"',
+					sort: 'start_date',
+					requestKey: `ticker_upcoming_${currentRequestId}`
+				});
+				nextTournament = upcomingTournaments.items[0] || null;
+				
+				if (nextTournament) {
+					updateCountdown();
+					if (!countdownInterval) {
+						countdownInterval = setInterval(updateCountdown, 1000);
+					}
+				}
+			} else {
+				nextTournament = null;
+				if (countdownInterval) {
+					clearInterval(countdownInterval);
+					countdownInterval = null;
+				}
+			}
 
 			if (activeTournament) {
 				// Load live scores
@@ -222,18 +269,7 @@
 			});
 			tickerItems = items.filter(isItemActive);
 
-			// If no live scores, ensure we have ticker items
-			if (mode === 'ticker_items' && tickerItems.length === 0) {
-				// Create a default item if none exist
-				tickerItems = [{
-					id: 'default',
-					type: 'announcement',
-					title: 'Welcome to FLI Fantasy Golf!',
-					message: 'Stay tuned for live tournament updates',
-					priority: 1,
-					is_active: true
-				}];
-			}
+			
 
 		} catch (err: any) {
 			if (err.status !== 404 && err.status !== 0) {
@@ -284,6 +320,7 @@
 	onDestroy(() => {
 		if (unsubscribeScores) unsubscribeScores();
 		if (unsubscribeItems) unsubscribeItems();
+		if (countdownInterval) clearInterval(countdownInterval);
 	});
 </script>
 
@@ -391,42 +428,84 @@
 				</div>
 			</div>
 		{:else}
-			<!-- TICKER ITEMS MODE -->
-			<div class="ticker-wrapper">
-				<div class="ticker-content-items">
-					{#each tickerItems as item}
-						<div class="ticker-item inline-flex items-center mx-8 gap-3 bg-black/30 rounded-lg px-5 py-3">
-							<span class="text-2xl">{getIconComponent(item.icon)}</span>
-							<div class="flex flex-col">
-								<span class="font-bold text-base text-white">{item.title}</span>
-								{#if item.message}
-									<span class="text-sm text-gray-300">{item.message}</span>
+			<!-- TICKER ITEMS MODE WITH COUNTDOWN -->
+			<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
+				<!-- Countdown Section -->
+				{#if nextTournament}
+					<div class="flex items-center justify-center md:justify-start gap-2 md:gap-4 bg-black/40 rounded-lg px-3 md:px-4 py-2 flex-shrink-0">
+						<div class="text-center">
+							<span class="text-xs text-gray-300 uppercase">Next Tournament</span>
+							<div class="font-bold text-white text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">{nextTournament.name}</div>
+						</div>
+						<div class="flex items-center gap-1 md:gap-2">
+							<div class="text-center bg-white/20 rounded px-2 py-1">
+								<div class="text-base md:text-lg font-bold text-white">{countdown.days}</div>
+								<div class="text-xs text-gray-300">Days</div>
+							</div>
+							<div class="text-center bg-white/20 rounded px-2 py-1 hidden sm:block">
+								<div class="text-base md:text-lg font-bold text-white">{countdown.hours}</div>
+								<div class="text-xs text-gray-300">Hrs</div>
+							</div>
+							<div class="text-center bg-white/20 rounded px-2 py-1">
+								<div class="text-base md:text-lg font-bold text-white">{countdown.minutes}</div>
+								<div class="text-xs text-gray-300">Min</div>
+							</div>
+						</div>
+						<!-- Blinking ticket button - visible on small screens -->
+						<a 
+							href="/shop" 
+							class="sm:hidden flex items-center gap-1 bg-yellow-500 hover:bg-yellow-400 text-black font-bold px-3 py-2 rounded-lg animate-pulse"
+							title="Buy Tickets"
+						>
+							<span class="text-lg">🎟️</span>
+							<span class="text-xs">Tickets</span>
+						</a>
+					</div>
+				{/if}
+				
+				<!-- Scrolling Ticker Items -->
+				<div class="ticker-wrapper flex-1 overflow-hidden">
+					<div class="ticker-content-items">
+						{#each tickerItems as item}
+							{@const isPromo = item.type === 'promotion'}
+							{@const isFantasy = item.type === 'fantasy'}
+							{@const isPop = isPromo || isFantasy}
+							<div class="ticker-item inline-flex items-center mx-8 gap-3 rounded-lg px-5 py-3 {isPromo ? 'bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse-subtle shadow-lg shadow-yellow-500/30' : isFantasy ? 'bg-gradient-to-r from-blue-500 to-purple-600 animate-pulse-subtle shadow-lg shadow-blue-500/30' : 'bg-black/30'}">
+								<span class="text-2xl {isPop ? 'animate-bounce' : ''}">{getIconComponent(item.icon)}</span>
+								<div class="flex flex-col">
+									<span class="font-bold text-base {isPop ? 'text-white' : 'text-white'}">{item.title}</span>
+									{#if item.message}
+										<span class="text-sm {isPromo ? 'text-black/80' : isFantasy ? 'text-white/80' : 'text-gray-300'}">{item.message}</span>
+									{/if}
+								</div>
+								{#if item.link_text}
+									<span class="ml-4 px-3 py-1 rounded-full text-sm font-bold transition-colors cursor-pointer {isPromo ? 'bg-black text-yellow-400 hover:bg-gray-900' : isFantasy ? 'bg-white text-purple-600 hover:bg-gray-100' : 'bg-white/20 hover:bg-white/30'}">
+										{item.link_text} →
+									</span>
 								{/if}
 							</div>
-							{#if item.link_text}
-								<span class="ml-4 px-3 py-1 bg-white/20 rounded-full text-sm font-medium hover:bg-white/30 transition-colors cursor-pointer">
-									{item.link_text} →
-								</span>
-							{/if}
-						</div>
-					{/each}
-					<!-- Duplicate for seamless loop -->
-					{#each tickerItems as item}
-						<div class="ticker-item inline-flex items-center mx-8 gap-3 bg-black/30 rounded-lg px-5 py-3">
-							<span class="text-2xl">{getIconComponent(item.icon)}</span>
-							<div class="flex flex-col">
-								<span class="font-bold text-base text-white">{item.title}</span>
-								{#if item.message}
-									<span class="text-sm text-gray-300">{item.message}</span>
+						{/each}
+						<!-- Duplicate for seamless loop -->
+						{#each tickerItems as item}
+							{@const isPromo = item.type === 'promotion'}
+							{@const isFantasy = item.type === 'fantasy'}
+							{@const isPop = isPromo || isFantasy}
+							<div class="ticker-item inline-flex items-center mx-8 gap-3 rounded-lg px-5 py-3 {isPromo ? 'bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse-subtle shadow-lg shadow-yellow-500/30' : isFantasy ? 'bg-gradient-to-r from-blue-500 to-purple-600 animate-pulse-subtle shadow-lg shadow-blue-500/30' : 'bg-black/30'}">
+								<span class="text-2xl {isPop ? 'animate-bounce' : ''}">{getIconComponent(item.icon)}</span>
+								<div class="flex flex-col">
+									<span class="font-bold text-base {isPop ? 'text-white' : 'text-white'}">{item.title}</span>
+									{#if item.message}
+										<span class="text-sm {isPromo ? 'text-black/80' : isFantasy ? 'text-white/80' : 'text-gray-300'}">{item.message}</span>
+									{/if}
+								</div>
+								{#if item.link_text}
+									<span class="ml-4 px-3 py-1 rounded-full text-sm font-bold transition-colors cursor-pointer {isPromo ? 'bg-black text-yellow-400 hover:bg-gray-900' : isFantasy ? 'bg-white text-purple-600 hover:bg-gray-100' : 'bg-white/20 hover:bg-white/30'}">
+										{item.link_text} →
+									</span>
 								{/if}
 							</div>
-							{#if item.link_text}
-								<span class="ml-4 px-3 py-1 bg-white/20 rounded-full text-sm font-medium hover:bg-white/30 transition-colors cursor-pointer">
-									{item.link_text} →
-								</span>
-							{/if}
-						</div>
-					{/each}
+						{/each}
+					</div>
 				</div>
 			</div>
 		{/if}
@@ -461,5 +540,20 @@
 	.ticker-content:hover,
 	.ticker-content-items:hover {
 		animation-play-state: paused;
+	}
+
+	:global(.animate-pulse-subtle) {
+		animation: pulse-subtle 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse-subtle {
+		0%, 100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.95;
+			transform: scale(1.02);
+		}
 	}
 </style>
