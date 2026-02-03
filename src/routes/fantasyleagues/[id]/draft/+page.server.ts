@@ -11,6 +11,7 @@ import {
 	undoLastPick,
 	makePick,
 	getAutoPick,
+	approveDraft,
 	type DraftManagement
 } from '$lib/draft/draftManagement';
 import type { DraftGolfer } from '$lib/draft/draftUtils';
@@ -93,7 +94,8 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 					gender: g.gender?.toLowerCase() as 'male' | 'female',
 					ranking: g.world_ranking || 999,
 					drafted: false,
-					drafted_by: null
+					drafted_by: null,
+					imageUrl: g.image ? pb.files.getURL(g, g.image) : null
 				}));
 			}
 		} catch (error) {
@@ -253,6 +255,8 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
+		const formData = await request.formData();
+		const timerDuration = parseInt(formData.get('timerDuration') as string) || 7;
 		const tournamentId = params.id;
 
 		try {
@@ -283,7 +287,8 @@ export const actions: Actions = {
 			
 			// Ensure all required fields exist
 			draftData.draft_order = draftData.draft_order || tournament.draft_order || [];
-			draftData.timer_duration = draftData.timer_duration || tournament.fantasy_settings?.pick_duration_seconds || 7;
+			// Use timer duration from form, or fall back to existing/default
+			draftData.timer_duration = timerDuration || draftData.timer_duration || tournament.fantasy_settings?.pick_duration_seconds || 7;
 			draftData.total_rounds = draftData.total_rounds || tournament.fantasy_settings?.rounds || 4;
 			draftData.current_round = draftData.current_round || 1;
 			draftData.current_pick = draftData.current_pick ?? 0;
@@ -428,6 +433,8 @@ export const actions: Actions = {
 		}
 
 		const userId = pb.authStore.model?.id;
+		const formData = await request.formData();
+		const timerDuration = parseInt(formData.get('timerDuration') as string) || 0;
 		const tournamentId = params.id;
 
 		try {
@@ -438,7 +445,14 @@ export const actions: Actions = {
 				return fail(403, { error: 'Only league owner can resume draft' });
 			}
 
-			const updatedDraft = resumeDraft(tournament.draft_managment);
+			let draftData = tournament.draft_managment as any;
+			
+			// Update timer duration if provided
+			if (timerDuration > 0) {
+				draftData.timer_duration = timerDuration;
+			}
+
+			const updatedDraft = resumeDraft(draftData);
 			if (updatedDraft.last_error) {
 				return fail(400, { error: updatedDraft.last_error });
 			}
@@ -482,10 +496,162 @@ export const actions: Actions = {
 				draft_managment: updatedDraft
 			});
 
+			// Clear golfers from fantasy_team records for this tournament
+			try {
+				const fantasyTeams = await pb.collection('fantasy_team').getFullList({
+					filter: `fantasy_tournament = "${tournamentId}"`
+				});
+				for (const team of fantasyTeams) {
+					await pb.collection('fantasy_team').update(team.id, {
+						golfers: []
+					});
+				}
+				console.log(`[resetDraft] Cleared golfers from ${fantasyTeams.length} fantasy_team records`);
+			} catch (err) {
+				console.log('[resetDraft] No fantasy_team records to clear or error:', err);
+			}
+
+			// Clear fantasy_draft_picks for this tournament
+			try {
+				const draftPicks = await pb.collection('fantasy_draft_picks').getFullList({
+					filter: `fantasy_tournament = "${tournamentId}"`
+				});
+				for (const pick of draftPicks) {
+					await pb.collection('fantasy_draft_picks').delete(pick.id);
+				}
+				console.log(`[resetDraft] Deleted ${draftPicks.length} fantasy_draft_picks records`);
+			} catch (err) {
+				console.log('[resetDraft] No fantasy_draft_picks records to delete or error:', err);
+			}
+
 			return { success: true, action: 'draft_reset' };
 		} catch (error: any) {
 			console.error('Error resetting draft:', error);
 			return fail(500, { error: error.message || 'Failed to reset draft' });
+		}
+	},
+
+	// Force reset the draft (for testing - bypasses approval check)
+	forceResetDraft: async ({ request, cookies, params }) => {
+		const pb = createServerPocketBase();
+		const allCookies = cookies.getAll();
+		const cookieString = allCookies.map((c) => `${c.name}=${c.value}`).join('; ');
+		pb.authStore.loadFromCookie(cookieString);
+
+		if (!pb.authStore.isValid) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const userId = pb.authStore.model?.id;
+		const tournamentId = params.id;
+
+		try {
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
+			if (league.league_owner !== userId) {
+				return fail(403, { error: 'Only league owner can force reset draft' });
+			}
+
+			// Force reset by clearing approval first, then resetting
+			let draftData = tournament.draft_managment as any;
+			if (draftData) {
+				draftData.approved = false;
+				draftData.approved_at = null;
+			}
+			
+			const updatedDraft = resetDraft(draftData);
+			
+			// Check for errors from resetDraft
+			if (updatedDraft.last_error) {
+				console.error('[forceResetDraft] resetDraft error:', updatedDraft.last_error);
+				// Clear the error and continue anyway for force reset
+				updatedDraft.last_error = null;
+			}
+
+			// Update draft_managment and reset status fields
+			await pb.collection('fantasy_tournament').update(tournamentId, {
+				draft_managment: updatedDraft,
+				draft_status: 'pending',
+				status: 'next'
+			});
+
+			// Clear golfers from fantasy_team records for this tournament
+			try {
+				const fantasyTeams = await pb.collection('fantasy_team').getFullList({
+					filter: `fantasy_tournament = "${tournamentId}"`
+				});
+				for (const team of fantasyTeams) {
+					await pb.collection('fantasy_team').update(team.id, {
+						golfers: []
+					});
+				}
+				console.log(`[forceResetDraft] Cleared golfers from ${fantasyTeams.length} fantasy_team records`);
+			} catch (err) {
+				console.log('[forceResetDraft] No fantasy_team records to clear or error:', err);
+			}
+
+			// Clear fantasy_draft_picks for this tournament
+			try {
+				const draftPicks = await pb.collection('fantasy_draft_picks').getFullList({
+					filter: `fantasy_tournament = "${tournamentId}"`
+				});
+				for (const pick of draftPicks) {
+					await pb.collection('fantasy_draft_picks').delete(pick.id);
+				}
+				console.log(`[forceResetDraft] Deleted ${draftPicks.length} fantasy_draft_picks records`);
+			} catch (err) {
+				console.log('[forceResetDraft] No fantasy_draft_picks records to delete or error:', err);
+			}
+
+			console.log('⚠️ Draft force reset (bypassed approval)');
+			return { success: true, action: 'draft_force_reset' };
+		} catch (error: any) {
+			console.error('Error force resetting draft:', error);
+			return fail(500, { error: error.message || 'Failed to force reset draft' });
+		}
+	},
+
+	// Approve the draft (locks it and prevents reset)
+	approveDraft: async ({ request, cookies, params }) => {
+		const pb = createServerPocketBase();
+		const allCookies = cookies.getAll();
+		const cookieString = allCookies.map((c) => `${c.name}=${c.value}`).join('; ');
+		pb.authStore.loadFromCookie(cookieString);
+
+		if (!pb.authStore.isValid) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const userId = pb.authStore.model?.id;
+		const tournamentId = params.id;
+
+		try {
+			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
+			const league = await pb.collection('fantasy_league').getOne(tournament.fantasy_league);
+			
+			if (league.league_owner !== userId) {
+				return fail(403, { error: 'Only league owner can approve draft' });
+			}
+
+			if (!tournament.draft_managment) {
+				return fail(400, { error: 'Draft not initialized' });
+			}
+
+			const updatedDraft = approveDraft(tournament.draft_managment);
+			if (updatedDraft.last_error) {
+				return fail(400, { error: updatedDraft.last_error });
+			}
+
+			await pb.collection('fantasy_tournament').update(tournamentId, {
+				draft_managment: updatedDraft
+			});
+
+			console.log('✅ Draft approved successfully');
+			return { success: true, action: 'draft_approved' };
+		} catch (error: any) {
+			console.error('Error approving draft:', error);
+			return fail(500, { error: error.message || 'Failed to approve draft' });
 		}
 	},
 
@@ -534,7 +700,10 @@ export const actions: Actions = {
 		const cookieString = allCookies.map((c) => `${c.name}=${c.value}`).join('; ');
 		pb.authStore.loadFromCookie(cookieString);
 
+		console.log('[makePick] Starting pick action');
+
 		if (!pb.authStore.isValid) {
+			console.log('[makePick] Not authenticated');
 			return fail(401, { error: 'Unauthorized' });
 		}
 
@@ -543,24 +712,38 @@ export const actions: Actions = {
 		const golferId = formData.get('golferId') as string;
 		const tournamentId = params.id;
 
+		console.log('[makePick] userId:', userId);
+		console.log('[makePick] golferId:', golferId);
+		console.log('[makePick] tournamentId:', tournamentId);
+
 		try {
 			const tournament = await pb.collection('fantasy_tournament').getOne(tournamentId);
 			const draft = tournament.draft_managment as DraftManagement;
 
+			console.log('[makePick] draft status:', draft?.status);
+			console.log('[makePick] current_drafter:', draft?.current_drafter);
+			console.log('[makePick] isMyTurn:', draft?.current_drafter === userId);
+
 			if (!draft) {
+				console.log('[makePick] Draft not initialized');
 				return fail(400, { error: 'Draft not initialized' });
 			}
 
 			// Verify it's the user's turn
 			if (draft.current_drafter !== userId) {
+				console.log('[makePick] Not user turn. Expected:', draft.current_drafter, 'Got:', userId);
 				return fail(403, { error: 'It is not your turn to pick' });
 			}
 
+			console.log('[makePick] Calling makePick function with golferId:', golferId);
 			const updatedDraft = makePick(draft, userId, golferId, false);
 
 			if (updatedDraft.last_error) {
+				console.log('[makePick] makePick returned error:', updatedDraft.last_error);
 				return fail(400, { error: updatedDraft.last_error });
 			}
+
+			console.log('[makePick] Pick successful');
 
 			// Build draft_results from team_compositions
 			const draftResults: Record<string, any> = {};
