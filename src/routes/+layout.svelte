@@ -53,7 +53,7 @@
 			<div class="flex items-center justify-between">
 				<a href="/" class="inline-block">
 					<img 
-						src="/brand_logos/fligolf-logo-white-2048x228.png" 
+						src="/brand_logos/fligolf-logo-white.png" 
 						alt="FLI Golf Logo" 
 						class="h-12 w-auto"
 					/>
@@ -182,7 +182,7 @@
 				<!-- Logo and Copyright -->
 				<div class="flex flex-col items-center md:items-start gap-3">
 					<img 
-						src="/brand_logos/fligolf-logo-white-2048x228.png" 
+						src="/brand_logos/fligolf-logo-white.png" 
 						alt="FLI Golf Logo" 
 						class="h-10 w-auto"
 					/>

@@ -58,6 +58,10 @@ export interface DraftManagement {
 	started_at: string | null;
 	completed_at: string | null;
 	
+	// Approval (prevents reset after owner approves)
+	approved: boolean;
+	approved_at: string | null;
+	
 	// Error tracking
 	last_error: string | null;
 }
@@ -107,6 +111,8 @@ export function createDraftManagement(
 		created_at: new Date().toISOString(),
 		started_at: null,
 		completed_at: null,
+		approved: false,
+		approved_at: null,
 		last_error: null
 	};
 }
@@ -183,9 +189,33 @@ export function resumeDraft(draft: DraftManagement): DraftManagement {
 }
 
 /**
+ * Approve the draft (owner only) - locks the draft and prevents reset
+ */
+export function approveDraft(draft: DraftManagement): DraftManagement {
+	if (draft.status !== 'completed') {
+		return { ...draft, last_error: 'Can only approve a completed draft' };
+	}
+
+	if (draft.approved) {
+		return { ...draft, last_error: 'Draft has already been approved' };
+	}
+
+	return {
+		...draft,
+		approved: true,
+		approved_at: new Date().toISOString(),
+		last_error: null
+	};
+}
+
+/**
  * Reset the draft (owner only) - clears all picks and starts over
  */
 export function resetDraft(draft: DraftManagement): DraftManagement {
+	if (draft.approved) {
+		return { ...draft, last_error: 'Cannot reset an approved draft' };
+	}
+
 	// Reset all golfers to undrafted
 	const resetGolfers = draft.available_golfers.map(g => ({
 		...g,
@@ -219,6 +249,8 @@ export function resetDraft(draft: DraftManagement): DraftManagement {
 		pick_history: [],
 		started_at: null,
 		completed_at: null,
+		approved: false,
+		approved_at: null,
 		last_error: null
 	};
 }
@@ -227,6 +259,10 @@ export function resetDraft(draft: DraftManagement): DraftManagement {
  * Undo the last pick (owner only)
  */
 export function undoLastPick(draft: DraftManagement): DraftManagement {
+	if (draft.approved) {
+		return { ...draft, last_error: 'Cannot undo picks on an approved draft' };
+	}
+
 	if (draft.pick_history.length === 0) {
 		return { ...draft, last_error: 'No picks to undo' };
 	}
