@@ -1,3 +1,4 @@
+<img width="936" height="446" alt="landing" src="https://github.com/user-attachments/assets/0ed645e8-e8c3-4725-a60f-9051b4f38526" />
 # FLI Fantasy Golf
 
 A fantasy golf application built with SvelteKit, PocketBase, and Tailwind CSS.
